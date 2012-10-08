@@ -11,14 +11,20 @@ import h5py
 #import md
 import subsystems
 
-     
+
 class System(object):
+    """
+    @ivar top: name of the starting topology file.
+    @ivar struct: name of the starting structure file. 
+    @ivar posres: name of the current position restraint include file.
+    """    
+
     def __init__(self, config, nframe=None):
         
         """
         a list of subsystems
         """
-        self.segments = None
+        self.subsystems = None
         self.config = config
         
         self.timestep = 0
@@ -52,16 +58,13 @@ class System(object):
         logging.info("pos {}".format(self.pos.shape))
         logging.info("frc {}".format(self.forces.shape))
         logging.info("vel {}".format(self.velocities.shape))
+        
+        
 
         if nframe is not None:
             self.read_frame(config["output_file"], nframe)
             
-        self.box = array([150., 150., 150.], 'f')
-        self.col_pcnt = 0.75
-        self.n_mc = 5000.0
-        self.collision_dist = 2.0
-        
-        self.ntranslations = 0
+
         
         
     def output_file_write(self, name, value):
@@ -172,6 +175,13 @@ class System(object):
         self.forces = array(grp["FORCES"],'f')
         self.velocities = array(grp["VELOCITIES"],'f')
         self.universe.atoms.positions = array(grp["FINAL_POSITIONS"],'f')
+
+Defaults = {
+            "ff":"charmm27", 
+            "water":"SPC",
+            "ignh":True
+            }
+
         
 from numpy.fft import fft, ifft, fftshift
 
