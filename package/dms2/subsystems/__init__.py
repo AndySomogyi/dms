@@ -1,3 +1,3 @@
 from subsystems import *
-from rigid_subsystem import *
-from legendre_subsystem import *
+from rigid_subsystem import RigidSubsystemFactory
+from legendre_subsystem import LegendreSubsystemFactory

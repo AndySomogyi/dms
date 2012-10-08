@@ -90,7 +90,7 @@ def md(config, atoms):
     return ResourceManager("md.trr")
 
     
-def minimise(config, atoms):
+def minimise(universe):
     
     logging.debug('starting minimise(...)')
     
@@ -98,12 +98,14 @@ def minimise(config, atoms):
     w.write(atoms)
     w.close()
     
+def thermalise(universe):
+    pass
+
+
     
     
     
     
-    
-   
 
 
 def rm(fname):

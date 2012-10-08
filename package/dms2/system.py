@@ -8,8 +8,6 @@ import numpy.random
 import MDAnalysis
 
 import h5py
-import MDAnalysis.KDTree.NeighborSearch as ns
-import MDAnalysis.core.parallel.distances as distances
 #import md
 import subsystems
 
@@ -34,8 +32,9 @@ class System(object):
     
         self.universe = MDAnalysis.Universe(config['struct'])  
         
+        # load the subsystems
         sslist = config["subsystems"]
-        self.ncgs, self.subsystems = sslist[0](self, sslist[:,-1])
+        self.ncgs, self.subsystems = sslist[0](self, *sslist[:,-1])
             
         nrs = len(self.segments)
         

@@ -8,6 +8,9 @@ import MDAnalysis as mda
 from numpy import sum, newaxis
 
 class RigidSubsystem(object):
+    def __init__(self, system, subsystem):
+        self.system = system
+        
     def frame(self):
         # the center of mass position 
         pos = sum(self.atoms.positions*self.atoms.masses()[:,newaxis],axis=0)/self.atoms.totalMass()
@@ -27,5 +30,5 @@ class RigidSubsystem(object):
         pass
     
     
-def RigidSubsystemFactory(system):
-    return None
+def RigidSubsystemFactory(system, *args):
+    return (3, [RigidSubsystem(system, arg) for arg in args])
