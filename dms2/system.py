@@ -1,5 +1,8 @@
 import logging
 logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', filename='dms.log',level=logging.DEBUG)
+import sys
+import os
+
 
 from numpy import array, zeros, transpose, dot, reshape, \
                   average, arange, sqrt, linalg, conjugate, \
@@ -8,8 +11,10 @@ import numpy.random
 import MDAnalysis
 
 import h5py
-#import md
+import md
 import subsystems
+
+import gromacs.setup
 
 
 class System(object):
@@ -166,6 +171,17 @@ class System(object):
     
     def thermalize(self):
         pass
+    
+    def solvate(self):
+        
+        self._write_tmp_struct()
+
+        
+    
+    def _write_tmp_struct(self):
+        w = MDAnalysis.Writer("tmp.pdb")
+        w.write(self.universe)
+        w.close()
         
     def read_frame(self, hdf, nframe):
         f = h5py.File(hdf, "r")
@@ -245,7 +261,7 @@ conf = {
     } 
 
 def main():
-    pass
+    print("hello")
     
 def hdf2trr(pdb,hdf,trr):
     u = MDAnalysis.Universe(pdb)

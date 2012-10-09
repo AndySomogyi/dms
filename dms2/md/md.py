@@ -63,7 +63,7 @@ def test_md(config, atoms):
     return ResourceManager(files)
     
     
-def md(config, atoms):
+def md(struct, top):
     """
     performs a molecular dynamics run
     @return: a tuple of (coordinate_file_names, velocity_file_names, force_file_names)
