@@ -90,50 +90,71 @@ def md(struct, top):
     return ResourceManager("md.trr")
 
     
-def minimise(universe):
-    
-    logging.debug('starting minimise(...)')
-    
-    w = MDAnalysis.Writer("md_in.pdb")
-    w.write(atoms)
-    w.close()
+def minimize(struct, top, minimize_dir='em', minimize_mdp=gromacs.config.templates['em.mdp'], 
+             minimize_output='em.pdb', minimize_deffnm="em", mdrunner=None, **kwargs):
+    """Energy minimize the system.
+
+    This sets up the system (creates run input files) and also runs
+    ``mdrun_d``. Thus it can take a while.
+
+    Additional itp files should be in the same directory as the top file.
+
+    Many of the keyword arguments below already have sensible values.
+
+    :Keywords:
+       *dirname*
+          set up under directory dirname [em]
+       *struct*
+          input structure (gro, pdb, ...) [solvate/ionized.gro]
+       *output*
+          output structure (will be put under dirname) [em.pdb]
+       *deffnm*
+          default name for mdrun-related files [em]
+       *top*
+          topology file [top/system.top]
+       *mdp*
+          mdp file (or use the template) [templates/em.mdp]
+       *includes*
+          additional directories to search for itp files
+       *mdrunner*
+          :class:`gromacs.run.MDrunner` class; by defauly we
+          just try :func:`gromacs.mdrun_d` and :func:`gromacs.mdrun` but a
+          MDrunner class gives the user the ability to run mpi jobs
+          etc. [None]
+       *kwargs*
+          remaining key/value pairs that should be changed in the
+          template mdp file, eg ``nstxtcout=250, nstfout=250``.
+
+    .. note:: If :func:`~gromacs.mdrun_d` is not found, the function
+              falls back to :func:`~gromacs.mdrun` instead.
+    """
+    return gromacs.setup.energy_minimize(dirname=minimize_dir, mdp=minimize_mdp, struct=struct, 
+                                         top=top, output=minimize_output, deffnm=minimize_deffnm, 
+                                         mdrunner=mdrunner, **kwargs)
     
 def thermalise(universe):
     pass
 
 
     
-
-def topology(struct, protein='protein', dirname='.', **pdb2gmx_args):
-    """Build Gromacs topology files from a Universe object.
-
-    :Keywords:
-       *struct*
-           input structure (**required**)
-       *protein*
-           name of the output files
-       *top*
-           name of the topology file
-       *dirname*
-           directory in which the new topology will be stored
-       *pdb2gmxargs*
-           arguments for ``pdb2gmx`` such as ``ff``, ``water``, ...
-
-    .. note::
-       At the moment this function simply runs ``pdb2gmx`` and uses
-       the resulting topology file directly. If you want to create
-       more complicated topologies and maybe also use additional itp
-       files or make a protein itp file then you will have to do this
-       manually.
-    """    
-    pass
+def topology(struct, protein="protein", top=None, topology_dir="top", posres=None, ff="charmm27", water="spc", ignh=True, **dummy):
+    if top is None:
+        logging.info("config did not specify a topology, autogenerating using pdb2gmx...")
+        pdb2gmx_args = {"ff":ff, "water":water, "ignh":ignh}
+        result = gromacs.setup.topology(struct, protein, "system.top", topology_dir, **pdb2gmx_args)
+        result["posres"] = protein + "_posres.itp"
+    else:
+        logging.info("config specified a topology, \{\"top\":{}, \"struct\":{}\}".format(top, struct))
+        result={"top":top, "struct":struct, "posres":posres}
+    return result
+        
     
-def solvate(struct='top/protein.pdb', top='top/system.top',
-            distance=0.9, boxtype='dodecahedron',
+def solvate(struct, top,
+            distance=0.9, boxtype='cubic',
             concentration=0, cation='NA+', anion='CL-',
             water='spc', solvent_name='SOL', with_membrane=False,
             ndx = 'main.ndx', mainselection = '"Protein"',
-            dirname='solvate',
+            solvate_dir='solvate',
             **kwargs):
     """Put protein into box, add water, add counter-ions.
 
@@ -207,7 +228,12 @@ def solvate(struct='top/protein.pdb', top='top/system.top',
           changed in the mdp file.
 
     """
-    pass
+    return gromacs.setup.solvate(struct, top,
+            distance, boxtype,
+            concentration, cation, anion,
+            water, solvent_name, with_membrane,
+            ndx, mainselection,
+            solvate_dir,  **kwargs)
     
    
 

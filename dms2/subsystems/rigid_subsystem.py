@@ -3,11 +3,12 @@ Created on Oct 3, 2012
 
 @author: andy
 '''
-
+import subsystems
 import MDAnalysis as mda
+
 from numpy import sum, newaxis
 
-class RigidSubsystem(object):
+class RigidSubsystem(subsystems.SubSystem):
     def __init__(self, system, subsystem):
         self.system = system
         

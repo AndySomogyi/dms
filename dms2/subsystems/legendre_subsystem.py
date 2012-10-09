@@ -9,5 +9,10 @@ Don't blame me, I didn't come up with these, nor did I
 implement them by choice.
 '''
 
+
+import subsystems
+import MDAnalysis as mda
+
+
 def LegendreSubsystemFactory(system, *args):
     return None

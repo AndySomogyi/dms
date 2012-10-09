@@ -3,7 +3,6 @@ logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', filename='dm
 import sys
 import os
 
-
 from numpy import array, zeros, transpose, dot, reshape, \
                   average, arange, sqrt, linalg, conjugate, \
                   real, correlate, newaxis, sum, mean, min, max, where
@@ -22,6 +21,10 @@ class System(object):
     @ivar top: name of the starting topology file.
     @ivar struct: name of the starting structure file. 
     @ivar posres: name of the current position restraint include file.
+    
+    @ivar ncgs: the number of coarse grained variables
+    @ivar subsystems: a list of subsystems, remains constant so long 
+                      as the topology does not change.
     """    
 
     def __init__(self, config, nframe=None):
@@ -38,19 +41,35 @@ class System(object):
             self.output_file = h5py.File(self.config["output_file"], "w")
         else:
             self.output_file = None
-             
-        logging.debug('creating rigid subsystems from config {}'.format(config))   
-    
-        self.universe = MDAnalysis.Universe(config['struct'])  
-        
-        # load the subsystems
-        sslist = config["subsystems"]
-        self.ncgs, self.subsystems = sslist[0](self, *sslist[:,-1])
             
-        nrs = len(self.segments)
+        # load the subsystems
+        # this list will remain constant as long as the topology remains constant.
+        logging.info("creating subsystems")
+        sslist = config["subsystems"]
+        
+        # python for ((car sslist) (cdr sslist))
+        self.ncgs, self.subsystems = sslist[0](self, *sslist[1:])
+            
+        # get the struct and top from config, generate if necessary
+        top =  md.topology(**config)
+        self.struct = top["struct"] 
+        self.top = top["top"]
+        self.posres = top["posres"]
+        del top
+            
+        # solvate the system (if the config says so)
+        if self.config.has_key("solvate") and self.config["solvate"]:
+            # solvate automatically calls universe_changed(...)
+            self.solvate()
+        else:
+            self.universe = MDAnalysis.Universe(self.struct)
+            [s.universe_changed(self.universe) for s in self.subsystems]
+                   
         
         md_ensembles = int(config["md_ensembles"])
         md_frames = int(config["md_frames"])
+        
+        nrs = len(self.subsystems)
         
         # cg: nensembe x n segment x 3
         self.pos = zeros((md_ensembles,nrs,self.ncgs))
@@ -63,8 +82,6 @@ class System(object):
         logging.info("pos {}".format(self.pos.shape))
         logging.info("frc {}".format(self.forces.shape))
         logging.info("vel {}".format(self.velocities.shape))
-        
-        
 
         if nframe is not None:
             self.read_frame(config["output_file"], nframe)
@@ -165,8 +182,6 @@ class System(object):
         self.output_file_write("FORCES", self.forces)  
         self.output_file_write("VELOCITIES", self.velocities)   
         
-    def minimize(self):
-        pass
     
     
     def thermalize(self):
@@ -174,10 +189,35 @@ class System(object):
     
     def solvate(self):
         
-        self._write_tmp_struct()
-
+        if self.config.has_key("solvate") and self.config["solvate"]:
+            logging.info("performing solvation")
         
-    
+            conf = self.config.copy()
+            map(lambda x: conf.pop(x,None), ["struct", "top", "posres"])
+        
+            sol = md.solvate(self.struct, self.top, **conf)
+            logging.info("completed md.solvate: {}".format(sol))
+            self.struct = sol["struct"]
+            self.mainselection = sol["mainselection"]
+            self.ndx = sol["ndx"]
+            
+            # performed a solvation, so need to update the universe
+            self.universe = MDAnalysis.Universe(self.struct)
+            [s.universe_changed(self.universe) for s in self.subsystems]
+        
+            #{'qtot': qtot,
+            #'struct': realpath(dirname, 'ionized.gro'),
+            #'ndx': realpath(dirname, ndx),      # not sure why this is propagated-is it used?
+            #'mainselection': mainselection,
+            #}
+            
+    def minimize(self):
+        conf = self.config.copy()
+        map(lambda x: conf.pop(x,None), ["struct", "top", "posres"])
+        mn = md.minimize(struct=self.struct, top=self.top)
+        print(mn)
+            
+
     def _write_tmp_struct(self):
         w = MDAnalysis.Writer("tmp.pdb")
         w.write(self.universe)
@@ -191,6 +231,10 @@ class System(object):
         self.forces = array(grp["FORCES"],'f')
         self.velocities = array(grp["VELOCITIES"],'f')
         self.universe.atoms.positions = array(grp["FINAL_POSITIONS"],'f')
+        
+        
+    def test(self):
+        pass
 
 Defaults = {
             "ff":"charmm27", 
@@ -251,17 +295,22 @@ conf = {
     'minimise_steps' : 10000, 
     'md_frames' : 250, 
     "md_ensembles" : 1,
-    'top': 'dpc_125_implicit.top', 
-    'struct': "dpc_125.2.ec.pdb", 
+    'struct': "1OMB.pdb", 
     "md_mdp":"nvt6.mdp",
     "subsystems" : [subsystems.RigidSubsystemFactory, "foo", "bar"],
     "cg_steps":150,
     "beta_t":10.0,
-    "cluster_radius":25.0
+    "cluster_radius":25.0,
+    "solvate":True
     } 
 
 def main():
-    print("hello")
+    print(os.getcwd())
+    
+    s=System(conf)
+    
+    print(s)
+   
     
 def hdf2trr(pdb,hdf,trr):
     u = MDAnalysis.Universe(pdb)
