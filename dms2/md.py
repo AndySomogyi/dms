@@ -11,8 +11,9 @@ import logging
 import re
 import subprocess
 import MDAnalysis
-import gromacs
+import gromacs.setup
 import gromacs.run
+import config
 
 class MDrunnerLocal(gromacs.run.MDrunner):
     """Manage running :program:`mdrun` as mpich2_ multiprocessor job with the SMPD mechanism.
@@ -71,7 +72,6 @@ def md(struct, top):
     w = MDAnalysis.Writer("md_in.pdb")
     w.write(atoms)
     w.close()
-    
     
     g=gromacs.grompp(f=config["md_mdp"], c="md_in.pdb", p=config["top"], o="md.tpr")
 
@@ -132,11 +132,142 @@ def minimize(struct, top, minimize_dir='em', minimize_mdp=gromacs.config.templat
                                          top=top, output=minimize_output, deffnm=minimize_deffnm, 
                                          mdrunner=mdrunner, **kwargs)
     
-def thermalise(universe):
+def MD_restrained(dirname='MD_POSRES', **kwargs):
+    """Set up MD with position restraints.
+
+    Additional itp files should be in the same directory as the top file.
+
+    Many of the keyword arguments below already have sensible values. Note that
+    setting *mainselection* = ``None`` will disable many of the automated
+    choices and is often recommended when using your own mdp file.
+
+    :Keywords:
+       *dirname*
+          set up under directory dirname [MD_POSRES]
+       *struct*
+          input structure (gro, pdb, ...) [em/em.pdb]
+       *top*
+          topology file [top/system.top]
+       *mdp*
+          mdp file (or use the template) [templates/md.mdp]
+       *ndx*
+          index file (supply when using a custom mdp)
+       *includes*
+          additional directories to search for itp files
+       *mainselection*
+          :program:`make_ndx` selection to select main group ["Protein"]
+          (If ``None`` then no canonical index file is generated and
+          it is the user's responsibility to set *tc_grps*,
+          *tau_t*, and *ref_t* as keyword arguments, or provide the mdp template
+          with all parameter pre-set in *mdp* and probably also your own *ndx*
+          index file.)
+       *deffnm*
+          default filename for Gromacs run [md]
+       *runtime*
+          total length of the simulation in ps [1000]
+       *dt*
+          integration time step in ps [0.002]
+       *qscript*
+          script to submit to the queuing system; by default
+          uses the template :data:`gromacs.config.qscript_template`, which can
+          be manually set to another template from :data:`gromacs.config.templates`;
+          can also be a list of template names.
+       *qname*
+          name to be used for the job in the queuing system [PR_GMX]
+       *mdrun_opts*
+          option flags for the :program:`mdrun` command in the queuing system
+          scripts such as "-stepout 100". [""]
+       *kwargs*
+          remaining key/value pairs that should be changed in the template mdp
+          file, eg ``nstxtcout=250, nstfout=250`` or command line options for
+          ``grompp` such as ``maxwarn=1``.
+
+          In particular one can also set **define** and activate
+          whichever position restraints have been coded into the itp
+          and top file. For instance one could have
+
+             *define* = "-DPOSRES_MainChain -DPOSRES_LIGAND"
+
+          if these preprocessor constructs exist. Note that there
+          **must not be any space between "-D" and the value.**
+
+          By default *define* is set to "-DPOSRES".
+
+    :Returns: a dict that can be fed into :func:`gromacs.setup.MD`
+              (but check, just in case, especially if you want to
+              change the ``define`` parameter in the mdp file)
+
+    .. Note:: The output frequency is drastically reduced for position
+              restraint runs by default. Set the corresponding ``nst*``
+              variables if you require more output.
+    """
+    logging.info("[%(dirname)s] Setting up MD with position restraints..." % vars())
+    kwargs.setdefault('struct', 'em/em.pdb')
+    kwargs.setdefault('qname', 'PR_GMX')
+    kwargs.setdefault('define', '-DPOSRES')
+    
+    # reduce size of output files
+    #kwargs.setdefault('nstxout', '50000')   # trr pos
+    #kwargs.setdefault('nstvout', '50000')   # trr veloc
+    #kwargs.setdefault('nstfout', '0')       # trr forces
+    #kwargs.setdefault('nstlog', '500')      # log file
+    #kwargs.setdefault('nstenergy', '2500')  # edr energy
+    #kwargs.setdefault('nstxtcout', '5000')  # xtc pos
+    kwargs.setdefault('deffnm','md')
+    kwargs.setdefault('mdp',config.templates['md_CHARMM27.mdp'])
+    
+    return gromacs.setup._setup_MD(dirname, **kwargs)
+    
+def equilibriate_restrained(universe):
     pass
 
+md_defaults = {
+    #title       : Protein-ligand complex NVT equilibration 
+    "define"      : "-DPOSRES",     # position restrain the protein and ligand
+    #; Run parameters
+    "integrator"  : "md",           # leap-frog integrator
+    "nsteps"      : 50000,          # 2 * 50000 = 100 ps
+    "dt"          : 0.002,          # 2 fs
+    #; Output control
+    "nstxout"     : 100,            # save coordinates every 0.2 ps
+    "nstvout"     : 100,            # save velocities every 0.2 ps
+    "nstenergy"   : 100,            # save energies every 0.2 ps
+    "nstlog"      : 100,            # update log file every 0.2 ps
+    #"energygrps"  : "Protein JZ4",  #
+    #; Bond parameters
+    "constraint_algorithm" : "lincs",   # holonomic constraints 
+    "constraints"     : "all-bonds",    # all bonds (even heavy atom-H bonds) constrained
+    "lincs_iter"      : 1,          # accuracy of LINCS
+    "lincs_order"     : 4,          # also related to accuracy
+    #; Neighborsearching
+    "ns_type"     : "grid",         # search neighboring grid cells
+    "nstlist"     : 5,              # 10 fs
+    "rlist"       : 0.9,            # short-range neighborlist cutoff (in nm)
+    "rcoulomb"    : 0.9,            # short-range electrostatic cutoff (in nm)
+    "rvdw"        : 1.4,            # short-range van der Waals cutoff (in nm)
+    #; Electrostatics
+    "coulombtype"     : "PME",      # Particle Mesh Ewald for long-range electrostatics
+    "pme_order"       : 4,          # cubic interpolation
+    "fourierspacing"  : 0.16,       # grid spacing for FFT
+    #; Temperature coupling
+    "tcoupl"      : "Berendsen",    # Berendsen thermostat
+    "tc-grps"     : "Protein SOL",  # two coupling groups - more accurate
+    "tau_t"       : [0.1, 0.1],    # time constant, in ps
+    "ref_t"       : [300, 300],    # reference temperature, one for each group, in K
+    #; Pressure coupling
+    "pcoupl"      : "no",           # no pressure coupling in NVT
+    #; Periodic boundary conditions
+    "pbc"         : "xyz",          # 3-D PBC
+    #; Dispersion correction
+    "DispCorr"    : "EnerPres",     # account for cut-off vdW scheme
+    #; Velocity generation
+    "gen_vel"     : "yes",          # assign velocities from Maxwell distribution
+    "gen_temp"    : 300,            # temperature for Maxwell distribution
+    "gen_seed"    : -1,             # generate a random seed
+    }
 
-    
+
+
 def topology(struct, protein="protein", top=None, topology_dir="top", posres=None, ff="charmm27", water="spc", ignh=True, **dummy):
     if top is None:
         logging.info("config did not specify a topology, autogenerating using pdb2gmx...")

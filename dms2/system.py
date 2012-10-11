@@ -26,9 +26,14 @@ class System(object):
     @ivar subsystems: a list of subsystems, remains constant so long 
                       as the topology does not change.
     """    
+    
+    # directories relative to current dir, where md will be performed.
+    em_dir = "em"
+    equilibriate_dir = "equlibriate"
+    md_dir = "md"
+    
 
-    def __init__(self, config, nframe=None):
-        
+    def __init__(self, config, nframe=None):      
         """
         a list of subsystems
         """
@@ -124,6 +129,10 @@ class System(object):
    
 
     def step(self):
+        """
+        do some stuff
+        """
+        
         # md - runs md with current state, reads in md output and populates 
         # segments statistics. 
         self.minimize()
@@ -150,7 +159,8 @@ class System(object):
         
     def md(self):
         """
-        write out the current state, run md, and read the output.
+        given the current state of the system, perform a set of md runs, 
+        and 
         """
         self.pos[:] = 0.0
         self.forces[:] = 0.0
@@ -185,7 +195,7 @@ class System(object):
     
     
     def thermalize(self):
-        pass
+        p
     
     def solvate(self):
         
@@ -215,7 +225,14 @@ class System(object):
         conf = self.config.copy()
         map(lambda x: conf.pop(x,None), ["struct", "top", "posres"])
         mn = md.minimize(struct=self.struct, top=self.top)
+        
+        #{'top': '/home/andy/tmp/1OMB/top/system.top', 'mainselection': '"Protein"', 'struct': '/home/andy/tmp/1OMB/em/em.pdb'}
+        
+        self.struct = mn["struct"]
         print(mn)
+        
+        self.universe.load_new(self.struct)
+        [s.minimized() for s in self.subsystems]
             
 
     def _write_tmp_struct(self):
@@ -291,25 +308,45 @@ def fft_corr(x1,x2):
 
 conf = { 
     'temperature' : 300.0, 
-    'thermalise_steps' : 2000, 
-    'minimise_steps' : 10000, 
-    'md_frames' : 250, 
     "md_ensembles" : 1,
     'struct': "1OMB.pdb", 
     "md_mdp":"nvt6.mdp",
     "subsystems" : [subsystems.RigidSubsystemFactory, "foo", "bar"],
     "cg_steps":150,
     "beta_t":10.0,
-    "cluster_radius":25.0,
+    "md_params":{"nsteps":1000},
+    "equilibriate_params":{"nsteps":1000},
     "solvate":True
     } 
 
 def main():
     print(os.getcwd())
     
-    s=System(conf)
+    #s=System(conf)
     
-    print(s)
+    #s.minimize()
+    
+    #s.thermalize()
+    
+    a={'top': '/home/andy/tmp/1OMB/top/system.top', 'mainselection': '"Protein"', 'struct': '/home/andy/tmp/1OMB/em/em.pdb', 'maxwarn':-1, "nsteps":1000}
+    
+    #b = md.md_defaults.copy()
+    
+    #b.update(a)
+    
+    r=md.MD_restrained("MD_POSRES", **a)
+    
+    print(r)
+    
+
+    #b = {'fourierspacing': 0.16, 'DispCorr': 'EnerPres', 'gen_vel': 'yes', 'integrator': 'md', 'gen_temp': 300, 'nstvout': 100, 'nstlog': 100, 'nstenergy': 100, 'ref_t': [300, 300], 'qscript': ['./local.sh'], 'maxwarn': -1, 'struct': '/home/andy/tmp/1OMB/MD_POSRES/md.gro', 'nstxtcout': '5000', 'top': '/home/andy/tmp/1OMB/top/system.top', 'gen_seed': -1, 'pcoupl': 'no', 'tau_t': [0.1, 0.1], 'constraints': 'all-bonds', 'deffnm': 'md', 'nsteps': 50000, 'tcoupl': 'Berendsen', 'rlist': 0.9, 'tc-grps': 'Protein SOL', 'lincs_order': 4, 'pme_order': 4, 'coulombtype': 'PME', 'nstlist': 5, 'nstxout': 100, 'lincs_iter': 1, 'ndx': '/home/andy/tmp/1OMB/MD_POSRES/md.ndx', 'mainselection': '"Protein"', 'constraint_algorithm': 'lincs', 'pbc': 'xyz', 'rcoulomb': 0.9, 'ns_type': 'grid', 'nstfout': '0', 'rvdw': 1.4}
+    
+    run = md.MDrunnerLocal("MD_POSRES", **r)
+    
+    r = run.run()
+
+    
+    print(r)
    
     
 def hdf2trr(pdb,hdf,trr):
