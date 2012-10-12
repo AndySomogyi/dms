@@ -268,7 +268,13 @@ md_defaults = {
 
 
 
-def topology(struct, protein="protein", top=None, topology_dir="top", posres=None, ff="charmm27", water="spc", ignh=True, **dummy):
+def topology(struct, protein="protein", top=None, dirname="top", posres=None, ff="charmm27", water="spc", ignh=True, **dummy):
+    """
+    Generate a topology for a given structure.
+    
+    @return a dict with the following keys: {"top", "struct", "posres"}, where
+    the values are the file names of the resulting topology, structure, and position restraint files.
+    """
     if top is None:
         logging.info("config did not specify a topology, autogenerating using pdb2gmx...")
         pdb2gmx_args = {"ff":ff, "water":water, "ignh":ignh}

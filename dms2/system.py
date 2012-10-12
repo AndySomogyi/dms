@@ -1,3 +1,20 @@
+"""
+
+Config Dictionary Specification
+{
+    struct: name of structure file (typically a PDB), required, 
+    protein: name of protein section, optional.
+    top: name of topology file, optional.
+    top_args:    a dictionary of optional additional arguments passed to topology and pdb2gmx, these may include
+                 dirname: directory where top file is generated,
+                 posres: ???
+                 and may include any arguments accepted by pdb2gmx, see:
+                 http://manual.gromacs.org/current/online/pdb2gmx.html
+                    
+        
+"""
+
+
 import logging
 logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', filename='dms.log',level=logging.DEBUG)
 import sys
@@ -55,12 +72,7 @@ class System(object):
         # python for ((car sslist) (cdr sslist))
         self.ncgs, self.subsystems = sslist[0](self, *sslist[1:])
             
-        # get the struct and top from config, generate if necessary
-        top =  md.topology(**config)
-        self.struct = top["struct"] 
-        self.top = top["top"]
-        self.posres = top["posres"]
-        del top
+        
             
         # solvate the system (if the config says so)
         if self.config.has_key("solvate") and self.config["solvate"]:
@@ -90,6 +102,17 @@ class System(object):
 
         if nframe is not None:
             self.read_frame(config["output_file"], nframe)
+            
+    def _topology(self, config):
+        """ 
+        set up the topology 
+        """
+        # get the struct and top from config, generate if necessary
+        top =  md.topology(**config)
+        self.struct = top["struct"] 
+        self.top = top["top"]
+        self.posres = top["posres"]
+        del top
             
 
         
@@ -310,12 +333,12 @@ conf = {
     'temperature' : 300.0, 
     "md_ensembles" : 1,
     'struct': "1OMB.pdb", 
-    "md_mdp":"nvt6.mdp",
     "subsystems" : [subsystems.RigidSubsystemFactory, "foo", "bar"],
     "cg_steps":150,
     "beta_t":10.0,
-    "md_params":{"nsteps":1000},
-    "equilibriate_params":{"nsteps":1000},
+    "topology_args": {},
+    "md_args":{"nsteps":1000},
+    "equilibriate_args":{"nsteps":1000},
     "solvate":True
     } 
 
