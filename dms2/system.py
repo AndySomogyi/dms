@@ -7,9 +7,19 @@ Config Dictionary Specification
     top: name of topology file, optional.
     top_args:    a dictionary of optional additional arguments passed to topology and pdb2gmx, these may include
                  dirname: directory where top file is generated,
-                 posres: ???
-                 and may include any arguments accepted by pdb2gmx, see:
+                 posres: name of position restraint include file,
+                 and may also include any arguments accepted by pdb2gmx, see:
                  http://manual.gromacs.org/current/online/pdb2gmx.html
+                 
+    md_nensemble: a optional number specifying how many 
+                 
+    md_args:    a dictionary of parameters used for the md run(s), these include
+                nsteps: number of md steps
+                multi: how many simulations to do for ensemble averaging. optional, defaults to 1
+                       (I know, this is a probably not the best key name, but this is
+                        the argname that mdrun takes, so used for consistency)
+                
+    "equilibriate_args":{"nsteps":1000},
                     
         
 """
@@ -63,6 +73,9 @@ class System(object):
             self.output_file = h5py.File(self.config["output_file"], "w")
         else:
             self.output_file = None
+
+        # set (or create) the topology
+        self._topology(config)
             
         # load the subsystems
         # this list will remain constant as long as the topology remains constant.
@@ -72,7 +85,6 @@ class System(object):
         # python for ((car sslist) (cdr sslist))
         self.ncgs, self.subsystems = sslist[0](self, *sslist[1:])
             
-        
             
         # solvate the system (if the config says so)
         if self.config.has_key("solvate") and self.config["solvate"]:
@@ -83,18 +95,18 @@ class System(object):
             [s.universe_changed(self.universe) for s in self.subsystems]
                    
         
-        md_ensembles = int(config["md_ensembles"])
-        md_frames = int(config["md_frames"])
+        md_nensemble = int(config["md_args"].get("multi", 1))
+        md_nsteps = int(config["md_args"]["nsteps"])
         
         nrs = len(self.subsystems)
         
         # cg: nensembe x n segment x 3
-        self.pos = zeros((md_ensembles,nrs,self.ncgs))
+        self.pos = zeros((md_nensemble,nrs,self.ncgs))
         
         # cg forces, nensembe x n segment x 3
-        self.forces = zeros((md_ensembles,nrs,self.ncgs))
+        self.forces = zeros((md_nensemble,nrs,self.ncgs))
         
-        self.velocities = zeros((md_ensembles,nrs,md_frames,self.ncgs))
+        self.velocities = zeros((md_nensemble,nrs,md_nsteps,self.ncgs))
 
         logging.info("pos {}".format(self.pos.shape))
         logging.info("frc {}".format(self.forces.shape))
@@ -108,7 +120,14 @@ class System(object):
         set up the topology 
         """
         # get the struct and top from config, generate if necessary
-        top =  md.topology(**config)
+
+
+        # keys (and default values) from main part of config
+        defs = [("struct", None), ("protein","protein"), ("top", None)]
+        top_args = dict([(s[0], config.get(*s)) for s in defs])
+        top_args.update(config.get("top_args", {}))
+        
+        top =  md.topology(**top_args)
         self.struct = top["struct"] 
         self.top = top["top"]
         self.posres = top["posres"]
@@ -336,7 +355,7 @@ conf = {
     "subsystems" : [subsystems.RigidSubsystemFactory, "foo", "bar"],
     "cg_steps":150,
     "beta_t":10.0,
-    "topology_args": {},
+    "top_args": {},
     "md_args":{"nsteps":1000},
     "equilibriate_args":{"nsteps":1000},
     "solvate":True
@@ -345,11 +364,13 @@ conf = {
 def main():
     print(os.getcwd())
     
-    #s=System(conf)
+    s=System(conf)
     
-    #s.minimize()
+    s.minimize()
     
-    #s.thermalize()
+    s.thermalize()
+    
+    return
     
     a={'top': '/home/andy/tmp/1OMB/top/system.top', 'mainselection': '"Protein"', 'struct': '/home/andy/tmp/1OMB/em/em.pdb', 'maxwarn':-1, "nsteps":1000}
     

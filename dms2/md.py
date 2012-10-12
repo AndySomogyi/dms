@@ -268,7 +268,7 @@ md_defaults = {
 
 
 
-def topology(struct, protein="protein", top=None, dirname="top", posres=None, ff="charmm27", water="spc", ignh=True, **dummy):
+def topology(struct, protein="protein", top=None, dirname="top", posres=None, ff="charmm27", water="spc", ignh=True, **top_args):
     """
     Generate a topology for a given structure.
     
@@ -278,7 +278,8 @@ def topology(struct, protein="protein", top=None, dirname="top", posres=None, ff
     if top is None:
         logging.info("config did not specify a topology, autogenerating using pdb2gmx...")
         pdb2gmx_args = {"ff":ff, "water":water, "ignh":ignh}
-        result = gromacs.setup.topology(struct, protein, "system.top", topology_dir, **pdb2gmx_args)
+        pdb2gmx_args.update(top_args)
+        result = gromacs.setup.topology(struct, protein, "system.top", dirname, **pdb2gmx_args)
         result["posres"] = protein + "_posres.itp"
     else:
         logging.info("config specified a topology, \{\"top\":{}, \"struct\":{}\}".format(top, struct))
