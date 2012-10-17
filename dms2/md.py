@@ -90,8 +90,8 @@ def md(struct, top):
     return ResourceManager("md.trr")
 
     
-def minimize(struct, top, minimize_dir='em', minimize_mdp=gromacs.config.templates['em.mdp'], 
-             minimize_output='em.pdb', minimize_deffnm="em", mdrunner=None, **kwargs):
+def minimize(struct, top, minimize_dir='em', minimize_mdp=config.templates['em.mdp'], 
+             minimize_output='em.pdb', minimize_deffnm="em", mdrunner=MDrunnerLocal, **kwargs):
     """Energy minimize the system.
 
     This sets up the system (creates run input files) and also runs
@@ -202,7 +202,6 @@ def MD_restrained(dirname='MD_POSRES', **kwargs):
               variables if you require more output.
     """
     logging.info("[%(dirname)s] Setting up MD with position restraints..." % vars())
-    kwargs.setdefault('struct', 'em/em.pdb')
     kwargs.setdefault('qname', 'PR_GMX')
     kwargs.setdefault('define', '-DPOSRES')
     
@@ -218,8 +217,6 @@ def MD_restrained(dirname='MD_POSRES', **kwargs):
     
     return gromacs.setup._setup_MD(dirname, **kwargs)
     
-def equilibriate_restrained(universe):
-    pass
 
 md_defaults = {
     #title       : Protein-ligand complex NVT equilibration 
@@ -288,8 +285,8 @@ def topology(struct, protein="protein", top=None, dirname="top", posres=None, ff
         
     
 def solvate(struct, top,
-            distance=0.9, boxtype='cubic',
-            concentration=0, cation='NA+', anion='CL-',
+            distance=0.5, boxtype='cubic',
+            concentration=0, cation='NA', anion='CL',
             water='spc', solvent_name='SOL', with_membrane=False,
             ndx = 'main.ndx', mainselection = '"Protein"',
             solvate_dir='solvate',

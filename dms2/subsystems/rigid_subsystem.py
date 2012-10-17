@@ -27,7 +27,7 @@ class RigidSubsystem(subsystems.SubSystem):
     def minimized(self):
         pass
     
-    def thermalized(self):
+    def equilibriated(self):
         pass
     
     

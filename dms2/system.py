@@ -36,11 +36,10 @@ from numpy import array, zeros, transpose, dot, reshape, \
 import numpy.random
 import MDAnalysis
 
-import h5py
+import h5py #@UnresolvedImport
 import md
 import subsystems
 
-import gromacs.setup
 
 
 class System(object):
@@ -236,10 +235,43 @@ class System(object):
         
     
     
-    def thermalize(self):
-        p
+    def equilibriate(self):
+        """
+        take the current structure and equilibriate it via md.
+        
+        Loads the self.universe with the minimized structure and notifies all the 
+        subsystems.
+        
+        @precondition: 
+        
+        
+        @postcondition: 
+        self.struct now refers to minimized structure
+        """
+
+        conf = self.config.get("equilibriate_args", {}).copy()
+        conf.update({"struct":self.struct, "top":self.top, 
+                     "dirname":System.equilibriate_dir, "deffnm":"equilibriate"})
+        kwargs = md.MD_restrained(**conf)
+        
+        #{'top': '/home/andy/tmp/1OMB/top/system.top', 'mainselection': '"Protein"', 'struct': '/home/andy/tmp/1OMB/em/em.pdb'}
+        
+        self.struct = kwargs["struct"]
+        print(kwargs)
+        
+        self._run_md(System.equilibriate_dir, **kwargs)
+        
+        self.struct = kwargs["struct"]
+        
+        self.universe.load_new(self.struct)
+        
+        #self.output_file_write("EQUILIBRIATED_POS", self.universe.atoms.positions)
+        [s.equilibriated() for s in self.subsystems]
     
     def solvate(self):
+        """
+        solvate the system.
+        """
         
         if self.config.has_key("solvate") and self.config["solvate"]:
             logging.info("performing solvation")
@@ -264,8 +296,20 @@ class System(object):
             #}
             
     def minimize(self):
+        """
+        take the current structure and minimize it via md.
+        
+        Loads the self.universe with the minimized structure and notifies all the 
+        subsystems.
+        
+        @precondition: 
+        
+        
+        @postcondition: 
+        self.struct now refers to minimized structure
+        """
         conf = self.config.copy()
-        map(lambda x: conf.pop(x,None), ["struct", "top", "posres"])
+        map(lambda x: conf.pop(x,None), ["struct", "top"])
         mn = md.minimize(struct=self.struct, top=self.top)
         
         #{'top': '/home/andy/tmp/1OMB/top/system.top', 'mainselection': '"Protein"', 'struct': '/home/andy/tmp/1OMB/em/em.pdb'}
@@ -274,6 +318,8 @@ class System(object):
         print(mn)
         
         self.universe.load_new(self.struct)
+        
+        self.output_file_write("MINIMIZED_POS", self.universe.atoms.positions)
         [s.minimized() for s in self.subsystems]
             
 
@@ -294,6 +340,16 @@ class System(object):
         
     def test(self):
         pass
+    
+    def _run_md(self, dirname, **kwargs):
+        """
+        actually perform the md run.
+        """
+        runner_factory = self.config.get("md_runner", md.MDrunnerLocal)
+        runner = runner_factory(dirname, **kwargs)
+        runner.run_check()
+        
+        
 
 Defaults = {
             "ff":"charmm27", 
@@ -356,41 +412,47 @@ conf = {
     "cg_steps":150,
     "beta_t":10.0,
     "top_args": {},
+    "em_args":{"nsteps":1000},
     "md_args":{"nsteps":1000},
     "equilibriate_args":{"nsteps":1000},
     "solvate":True
     } 
+
+str="System has non-zero total charge: 2.000000"
+rep="System has non-zero total charge: *(?P<qtot>[-+]?\d*\.\d+[eE][-+]\d+)"
 
 def main():
     print(os.getcwd())
     
     s=System(conf)
     
-    s.minimize()
     
-    s.thermalize()
+    #s.minimize()
     
-    return
+    #s.thermalize()
     
-    a={'top': '/home/andy/tmp/1OMB/top/system.top', 'mainselection': '"Protein"', 'struct': '/home/andy/tmp/1OMB/em/em.pdb', 'maxwarn':-1, "nsteps":1000}
+    #return
+    
+    #a={'top': '/home/andy/tmp/1OMB/top/system.top', 'mainselection': '"Protein"', 'struct': '/home/andy/tmp/1OMB/em/em.pdb', 'maxwarn':-1, "nsteps":1000}
     
     #b = md.md_defaults.copy()
     
     #b.update(a)
     
-    r=md.MD_restrained("MD_POSRES", **a)
+    s.minimize()
     
-    print(r)
+    s.equilibriate()
+    
     
 
     #b = {'fourierspacing': 0.16, 'DispCorr': 'EnerPres', 'gen_vel': 'yes', 'integrator': 'md', 'gen_temp': 300, 'nstvout': 100, 'nstlog': 100, 'nstenergy': 100, 'ref_t': [300, 300], 'qscript': ['./local.sh'], 'maxwarn': -1, 'struct': '/home/andy/tmp/1OMB/MD_POSRES/md.gro', 'nstxtcout': '5000', 'top': '/home/andy/tmp/1OMB/top/system.top', 'gen_seed': -1, 'pcoupl': 'no', 'tau_t': [0.1, 0.1], 'constraints': 'all-bonds', 'deffnm': 'md', 'nsteps': 50000, 'tcoupl': 'Berendsen', 'rlist': 0.9, 'tc-grps': 'Protein SOL', 'lincs_order': 4, 'pme_order': 4, 'coulombtype': 'PME', 'nstlist': 5, 'nstxout': 100, 'lincs_iter': 1, 'ndx': '/home/andy/tmp/1OMB/MD_POSRES/md.ndx', 'mainselection': '"Protein"', 'constraint_algorithm': 'lincs', 'pbc': 'xyz', 'rcoulomb': 0.9, 'ns_type': 'grid', 'nstfout': '0', 'rvdw': 1.4}
     
-    run = md.MDrunnerLocal("MD_POSRES", **r)
+    #run = md.MDrunnerLocal("MD_POSRES", **r)
     
-    r = run.run()
+    #r = run.run()
 
     
-    print(r)
+    #print(r)
    
     
 def hdf2trr(pdb,hdf,trr):

@@ -13,8 +13,7 @@ cpp            = cpp
 include        = -I. -I.. -I../top
 define         = -DPOSRES -DFLEXSPC
 
-;integrator     = cg
-integrator     = l-bfgs
+integrator     = steep
 emtol          = 500
 emstep         = 0.01
 nsteps         = 1000

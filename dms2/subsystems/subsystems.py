@@ -22,6 +22,6 @@ class SubSystem(object):
     def minimized(self):
         pass
     
-    def thermalized(self):
+    def equilibriated(self):
         pass
     
