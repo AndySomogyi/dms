@@ -14,6 +14,10 @@ class SubSystem(object):
         pass
     
     def frame(self):
+        """
+        notifices the subsystem that a new frame is ready. 
+        @return a tuple of (position,velocity,force) CG variables for the current frame.
+        """
         pass
     
     def translate(self):

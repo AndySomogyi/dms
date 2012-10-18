@@ -9,8 +9,16 @@ import MDAnalysis as mda
 from numpy import sum, newaxis
 
 class RigidSubsystem(subsystems.SubSystem):
-    def __init__(self, system, subsystem):
+    """
+    A set of CG variables that store center of mass postion and 
+    orientation. 
+    """
+    def __init__(self, system, select):
         self.system = system
+        self.select = select
+        
+    def universe_changed(self, universe):
+        self.atoms = universe.selectAtoms(self.select)
         
     def frame(self):
         # the center of mass position 

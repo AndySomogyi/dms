@@ -14,6 +14,9 @@ import MDAnalysis
 import gromacs.setup
 import gromacs.run
 import config
+from collections import namedtuple
+from os import path
+
 
 class MDrunnerLocal(gromacs.run.MDrunner):
     """Manage running :program:`mdrun` as mpich2_ multiprocessor job with the SMPD mechanism.
@@ -64,28 +67,68 @@ def test_md(config, atoms):
     return ResourceManager(files)
     
     
-def md(struct, top):
-    """
-    performs a molecular dynamics run
-    @return: a tuple of (coordinate_file_names, velocity_file_names, force_file_names)
-    """
-    w = MDAnalysis.Writer("md_in.pdb")
-    w.write(atoms)
-    w.close()
-    
-    g=gromacs.grompp(f=config["md_mdp"], c="md_in.pdb", p=config["top"], o="md.tpr")
+def MD(dirname='MD', **kwargs):
+    """Set up equilibrium MD.
 
-    if os.environ.has_key("SLURM_JOBID"):
-        logging.info("running in SLURM")
-        m=gromacs.run.MDrunnerOpenMPI(deffnm="md")
-    else:
-        logging.info("not using SLURM")
-        m=MDrunnerLocal(deffnm="md")
+    Additional itp files should be in the same directory as the top file.
+
+    Many of the keyword arguments below already have sensible values. Note that
+    setting *mainselection* = ``None`` will disable many of the automated
+    choices and is often recommended when using your own mdp file.
+
+    :Keywords:
+       *dirname*
+          set up under directory dirname [MD]
+       *struct*
+          input structure (gro, pdb, ...) [MD_POSRES/md_posres.pdb]
+       *top*
+          topology file [top/system.top]
+       *mdp*
+          mdp file (or use the template) [templates/md.mdp]
+       *ndx*
+          index file (supply when using a custom mdp)
+       *includes*
+          additional directories to search for itp files
+       *mainselection*
+          ``make_ndx`` selection to select main group ["Protein"]
+          (If ``None`` then no canonical index file is generated and
+          it is the user's responsibility to set *tc_grps*,
+          *tau_t*, and *ref_t* as keyword arguments, or provide the mdp template
+          with all parameter pre-set in *mdp* and probably also your own *ndx*
+          index file.)
+       *deffnm*
+          default filename for Gromacs run [md]
+       *runtime*
+          total length of the simulation in ps [1000]
+       *dt*
+          integration time step in ps [0.002]
+       *qscript*
+          script to submit to the queuing system; by default
+          uses the template :data:`gromacs.config.qscript_template`, which can
+          be manually set to another template from :data:`gromacs.config.templates`;
+          can also be a list of template names.
+       *qname*
+          name to be used for the job in the queuing system [MD_GMX]
+       *mdrun_opts*
+          option flags for the :program:`mdrun` command in the queuing system
+          scripts such as "-stepout 100 -dgdl". [""]
+       *kwargs*
+          remaining key/value pairs that should be changed in the template mdp
+          file, e.g. ``nstxtcout=250, nstfout=250`` or command line options for
+          :program`grompp` such as ``maxwarn=1``.
+
+    :Returns: a dict that can be fed into :func:`gromacs.setup.MD`
+              (but check, just in case, especially if you want to
+              change the *define* parameter in the mdp file)
+    """
+
+    logging.info("[%(dirname)s] Setting up MD..." % vars())
     
-    m.run()
+    kwargs.setdefault('nstxout', 10)   # trr pos
+    kwargs.setdefault('nstvout', 10)   # trr veloc
+    kwargs.setdefault('nstfout', 10)   # trr forces
     
-    os.remove("md_in.pdb")
-    os.remove("md.tpr")
+    return gromacs.setup._setup_MD(dirname, **kwargs)
     
     return ResourceManager("md.trr")
 
@@ -202,7 +245,7 @@ def MD_restrained(dirname='MD_POSRES', **kwargs):
               variables if you require more output.
     """
     logging.info("[%(dirname)s] Setting up MD with position restraints..." % vars())
-    kwargs.setdefault('qname', 'PR_GMX')
+    kwargs.setdefault('qname', None)
     kwargs.setdefault('define', '-DPOSRES')
     
     # reduce size of output files
@@ -212,7 +255,6 @@ def MD_restrained(dirname='MD_POSRES', **kwargs):
     #kwargs.setdefault('nstlog', '500')      # log file
     #kwargs.setdefault('nstenergy', '2500')  # edr energy
     #kwargs.setdefault('nstxtcout', '5000')  # xtc pos
-    kwargs.setdefault('deffnm','md')
     kwargs.setdefault('mdp',config.templates['md_CHARMM27.mdp'])
     
     return gromacs.setup._setup_MD(dirname, **kwargs)
@@ -370,6 +412,42 @@ def solvate(struct, top,
             ndx, mainselection,
             solvate_dir,  **kwargs)
     
+    
+def run_MD(dirname, md_runner=MDrunnerLocal, **kwargs):
+    """
+    actually perform the md run.
+    
+    does not alter class state, only the file system is changed
+    
+    @param kwargs: a dictionary of arguments that are passed to mdrun.
+    
+                   mdrun, with -multi multiple systems are simulated in parallel. As many input files are 
+                   required as the number of systems. The system number is appended to the run input and 
+                   each output filename, for instance topol.tpr becomes topol0.tpr, topol1.tpr etc. 
+                   The number of nodes per system is the total number of nodes divided by the number of systems.
+                   
+                   run_MD automatically creates n copies of the source tpr specified by deffnm.
+                   
+    @return: a named tuple, currently, this contains a list of resulting trajectgories in
+        in result.trajectories.
+                    
+    """
+    Result = namedtuple('Result', 'trajectories')
+    
+    # pick out the relevant mdrun keywords from kwargs
+    mdrun_args = ["h","version","nice","deffnm","xvg","pd","dd","nt","npme","ddorder",
+                  "ddcheck","rdd","rcon","dlb","dds","gcom","v","compact","seppot",
+                  "pforce","reprod","cpt","cpnum","append","maxh","multi","replex",
+                  "reseed","ionize"]
+    keys = [i for i in kwargs.keys() if i in mdrun_args]
+    kwargs = dict((i, kwargs[i]) for i in keys)
+    
+    
+    runner = md_runner(dirname, **kwargs)
+    runner.run_check()
+    
+    return Result([path.abspath(path.join(dirname, kwargs["deffnm"] + ".trr"))])
+
    
 
 def rm(fname):
