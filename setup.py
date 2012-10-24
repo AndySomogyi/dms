@@ -1,9 +1,8 @@
-# setuptools installation of GromacsWrapper
-# Copyright (c) 2008-2011 Oliver Beckstein <orbeckst@gmail.com>
+# setuptools installation of DMS
+# Copyright (c) 2008-2011 Andy Somogyi : somogyie at indiana period edu
 # Released under the GNU Public License 3 (or higher, your choice)
+# setup.py originally boosted from Oliver Beckstein's Gromacs Wrapper 
 #
-# See the files INSTALL and README for details or visit
-# http://sbcb.bioch.ox.ac.uk/oliver/software/GromacsWrapper/
 from __future__ import with_statement
 
 from ez_setup import use_setuptools
@@ -18,15 +17,15 @@ version = "0.0.1"
 
 setup(name="DMS",
       version=version,
-      description="A python wrapper around the gromacs tools.",
+      description="A library for doing coarse grained brownian motion dynamics.",
       long_description=long_description,
-      author="Oliver Beckstein",
-      author_email="orbeckst@gmail.com",
+      author="Andy Somogyi",
+      author_email="somogyie at indiana period edu",
       license="GPLv3",
-      url="://github.com/orbeckst/GromacsWrapper",
-      download_url="https://github.com/orbeckst/GromacsWrapper/downloads",
+      url="://github.com/AndySomogyi/dms",
+      download_url="https://github.com/AndySomogyi/downloads",
       keywords="science Gromacs analysis 'molecular dynamics'",
-      classifiers=['Development Status :: 4 - Beta',
+      classifiers=['Development Status :: 0.0.1 - way pre alpha',
                    'Environment :: Console',
                    'Intended Audience :: Science/Research',
                    'License :: OSI Approved :: GNU General Public License (GPL)',
@@ -46,6 +45,8 @@ setup(name="DMS",
                     },
       install_requires = ['numpy>=1.0',
                           'scipy',        # numkit needs it
+                          "MDAnalysis", 
+                          "GromacsWrapper"
                           ],              # basic package (w/o analysis)
       extras_require = {
                 'numkit': ['scipy'],
