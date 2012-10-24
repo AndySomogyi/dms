@@ -20,7 +20,7 @@ class SubSystem(object):
         """
         pass
     
-    def translate(self):
+    def translate(self, values):
         pass
     
     def minimized(self):

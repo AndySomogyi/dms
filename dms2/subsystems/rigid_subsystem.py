@@ -29,8 +29,8 @@ class RigidSubsystem(subsystems.SubSystem):
         force = sum(self.atoms.forces,axis=0)
         return (pos,vel,force)
     
-    def translate(self):
-        pass
+    def translate(self, values):
+        self.atoms.positions += values
     
     def minimized(self):
         pass
