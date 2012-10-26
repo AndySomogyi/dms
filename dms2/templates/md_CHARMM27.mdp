@@ -98,12 +98,16 @@ ref_p                    = 1.0
 ; Scaling of reference coordinates, No, All or COM
 refcoord_scaling         = No
 ; Random seed for Andersen thermostat
-andersen_seed            = 815131
+andersen_seed            = -1
 
 ; GENERATE VELOCITIES FOR STARTUP RUN
 gen_vel                  = yes
 gen-temp                 = 300
-gen_seed                 = 173545
+gen_seed                 = -1
+
+; Langevin dynamics
+bd_fric                  = 0
+ld_seed                  = 1993
 
 ; OPTIONS FOR BONDS    
 ; CHARMM uses SHAKE with tol 1e-6

@@ -65,6 +65,8 @@ class System(object):
     # file name of the 'system', all output will be written to this file name.
     system_struct = "system.pdb"
     
+    # scale factor for langevin equation 
+    
 
     def __init__(self, config, nframe=None):      
         """
@@ -105,9 +107,10 @@ class System(object):
             self.universe = MDAnalysis.Universe(self.struct)
             [s.universe_changed(self.universe) for s in self.subsystems]
                    
-        
         md_nensemble = int(config.get("multi", 1))
-        md_nsteps = int(config["md"]["nsteps"])
+        
+        # number of data points in trajectory, md steps / output interval
+        md_nsteps = int(config["md"]["nsteps"])/int(md.MD_config_get(config["md"], "nstout"))
         
         nrs = len(self.subsystems)
         
@@ -242,6 +245,7 @@ class System(object):
         conf = {"struct":System.system_struct, 
                 "top":self.top, 
                 "dirname":System.md_dir, 
+                "multi":self.pos.shape[0],
                 "deffnm":"md"}
         conf.update(self.config.get("md", {}))
         
@@ -259,7 +263,7 @@ class System(object):
         
         # add the multi here, its an arg for mdrun, NOT grompp...
         # this is how many ensembles we do.
-        # mdr["multi"] = self.pos.shape[0]
+        mdr["multi"] = self.pos.shape[0]
         
         # run the md
         mdr = md.run_MD(System.md_dir, **mdr)
@@ -278,6 +282,7 @@ class System(object):
                         self.pos[f[0],s[0],:] += pos
                         self.velocities[f[0],s[0],ts[0],:] = vel
                         self.forces[f[0],s[0],:] += frc
+                
             self.universe.trajectory.close()
             
         # done with trajectories, reload the starting (equilibriated) structure
@@ -526,8 +531,8 @@ C60 = {
     "beta_t":10.0,
     "top_args": {},
     "minimize":{"nsteps":1000},
-    "md":{"nsteps":10000},
-    "multi":10,
+    "md":{"nsteps":1000},
+    "multi":8,
     "equilibriate":{"nsteps":1000},
     "solvate":False,
     "top":"C60.top",
@@ -561,6 +566,11 @@ def main():
     
     #s.test()
     s.md()
+    
+
+    
+    
+    
     
 
    

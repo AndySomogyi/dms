@@ -16,6 +16,7 @@ import gromacs.run
 import config
 from collections import namedtuple
 from os import path
+import shutil
 
 
 class MDrunnerLocal(gromacs.run.MDrunner):
@@ -124,13 +125,40 @@ def MD(dirname='MD', **kwargs):
 
     logging.info("[%(dirname)s] Setting up MD..." % vars())
     
-    kwargs.setdefault('nstxout', 10)   # trr pos
-    kwargs.setdefault('nstvout', 10)   # trr veloc
-    kwargs.setdefault('nstfout', 10)   # trr forces
+    # set the interval to save output values.
+    # nstout is NOT a valid mdp name, however we need all the values (force, vel, pos) to
+    # be written at at the same time interval, so I came up with this key to set the
+    # output interval for all of them.
+    nstout = MD.defaults["nstout"]
+    if kwargs.has_key("nstout"):
+        nstout = kwargs.pop("nstout")
+    kwargs.setdefault('nstxout', nstout)   # trr pos
+    kwargs.setdefault('nstvout', nstout)   # trr veloc
+    kwargs.setdefault('nstfout', nstout)   # trr forces
+    
+    kwargs.setdefault('mdp',config.templates['md_CHARMM27.mdp'])
     
     return gromacs.setup._setup_MD(dirname, **kwargs)
+
+
+MD.defaults = {
+               "nstout":10,          # output things every so many steps.
+               'mdp':config.templates['md_CHARMM27.mdp']
+               }
+
+def MD_config_get(conf, what):
+    """
+    get a value from the config, if it does not have it, use the
+    appropriate defaults. 
     
-    return ResourceManager("md.trr")
+    This is the same value that MD will use.
+    """
+    result = None
+    if conf.has_key(what):
+        result = conf[what]
+    else:
+        result = MD.defaults[what]
+    return result
 
     
 def minimize(struct, top, minimize_dir='em', minimize_mdp=config.templates['em.mdp'], 
@@ -413,7 +441,7 @@ def solvate(struct, top,
             solvate_dir,  **kwargs)
     
     
-def run_MD(dirname, md_runner=MDrunnerLocal, **kwargs):
+def run_MD(dirname, md_runner=gromacs.run.MDrunner, **kwargs):
     """
     actually perform the md run.
     
@@ -441,14 +469,23 @@ def run_MD(dirname, md_runner=MDrunnerLocal, **kwargs):
                   "reseed","ionize"]
     keys = [i for i in kwargs.keys() if i in mdrun_args]
     kwargs = dict((i, kwargs[i]) for i in keys)
+    ncores = 4
     
-    
+    multi = kwargs.pop("multi", 1)
+    if multi > 1:
+        kwargs["multi"] = multi
+        files = map(lambda i: 
+                    path.abspath(path.join(dirname, kwargs["deffnm"] + str(i) + ".trr")), 
+                    range(multi))
+        ncores = multi
+    else:
+        files = []
+        
     runner = md_runner(dirname, **kwargs)
-    runner.run_check()
+    runner.mpiexec = "mpiexec"
+    runner.run_check(ncores = ncores)
     
-    return Result([path.abspath(path.join(dirname, kwargs["deffnm"] + ".trr"))])
-
-   
+    return Result(files)
 
 def rm(fname):
     try:
