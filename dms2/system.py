@@ -40,7 +40,9 @@ import h5py #@UnresolvedImport
 import md
 import subsystems
 
-
+# change MDAnalysis table to read carbon correctly
+import MDAnalysis.topology.tables
+MDAnalysis.topology.tables.atomelements["C0"]="C"
 
 class System(object):
     """
@@ -74,7 +76,7 @@ class System(object):
         """
         self.subsystems = None
         self.config = config
-        
+        self.pbc = array(config["pbc"])
         self.timestep = 0
         
         # default values
@@ -115,12 +117,9 @@ class System(object):
         nrs = len(self.subsystems)
         
         # cg: nensembe x n segment x 3
-        self.pos = zeros((md_nensemble,nrs,self.ncgs))
-        
-        # cg forces, nensembe x n segment x 3
-        self.forces = zeros((md_nensemble,nrs,self.ncgs))
-        
-        self.velocities = zeros((md_nensemble,nrs,md_nsteps,self.ncgs))
+        self.pos        = zeros((md_nensemble,nrs,md_nsteps, self.ncgs))
+        self.forces     = zeros((md_nensemble,nrs,md_nsteps, self.ncgs))
+        self.velocities = zeros((md_nensemble,nrs,md_nsteps, self.ncgs))
 
         logging.info("pos {}".format(self.pos.shape))
         logging.info("frc {}".format(self.forces.shape))
@@ -268,40 +267,8 @@ class System(object):
         # run the md
         mdr = md.run_MD(System.md_dir, **mdr)
         
-        self.pos[:] = 0.0
-        self.forces[:] = 0.0
-        self.velocities[:] = 0.0
-        
-        for f in enumerate(mdr.trajectories):
-            print(f[1])
-            self.universe.load_new(f[1])
-            for ts in enumerate(self.universe.trajectory):
-                if ts[0] < self.velocities.shape[2]:
-                    for s in enumerate(self.subsystems):
-                        pos,vel,frc = s[1].frame()
-                        self.pos[f[0],s[0],:] += pos
-                        self.velocities[f[0],s[0],ts[0],:] = vel
-                        self.forces[f[0],s[0],:] += frc
-                
-            self.universe.trajectory.close()
-            
-        # done with trajectories, reload the starting (equilibriated) structure
-        # need to do this as the md result will delete the trajectory files,
-        # and if these are deleted while the universe has them open, bad things
-        # happen.
-        self.universe.load_new(System.system_struct)
-        
-        # TODO
-        # delete md output files...
-            
-        # done with files, divide by n frames to get average
-        self.pos[:,:,:] /= (self.velocities.shape[2])
-        self.forces[:,:,:] /= (self.velocities.shape[2])  
-        
-        self.output_file_write("POS", self.pos)  
-        self.output_file_write("FORCES", self.forces)  
-        self.output_file_write("VELOCITIES", self.velocities)   
-        
+        self._processes_trajectories(mdr.trajectories)
+
         logging.debug("finished System.md()")
         
 
@@ -349,11 +316,61 @@ class System(object):
         
         self.universe.load_new(self.struct)
         
-        self.output_file_write("EQUILIBRIATED_POS", self.universe.atoms.positions)
+        self.output_file_write("ATOMIC_EQUILIBRIATED_POSITIONS", self.universe.atoms.positions)
         
         [s.equilibriated() for s in self.subsystems]
         
         logging.info("finished System.equilibriate()")
+        
+    def _processes_trajectories(self, trajectories):
+        """
+        reads each given atomic trajectory, extracts the
+        coarse grained information, updates state variables with 
+        this info, and saves it to the output file.
+        
+        @precondition: univserse is intialized with a topology
+        compatible with the topologies
+        
+        """
+        # zero the state variables (for this frame)
+        self.pos[:] = 0.0
+        self.forces[:] = 0.0
+        self.velocities[:] = 0.0
+
+        for fi, f in enumerate(trajectories):
+            print(f)
+            self.universe.load_new(f)
+            for tsi, _ in enumerate(self.universe.trajectory):
+                if tsi < self.velocities.shape[2]:
+                    for si, s in enumerate(self.subsystems):
+                        pos,vel,frc = s.frame()
+                        self.pos       [fi,si,tsi,:] = pos
+                        self.velocities[fi,si,tsi,:] = vel
+                        self.forces    [fi,si,tsi,:] = frc
+                        
+                        if(tsi % 25 == 0):
+                            print("processing frame {},\t{}%".format(tsi, 100.0*float(tsi)/float(self.velocities.shape[2])))
+    
+                        
+                
+            self.universe.trajectory.close()
+            
+        # done with trajectories, reload the starting (equilibriated) structure
+        # need to do this as the md result will delete the trajectory files,
+        # and if these are deleted while the universe has them open, bad things
+        # happen.
+        #self.universe.load_new(System.system_struct)
+        
+        # TODO
+        # delete md output files...
+            
+        # done with files, divide by n frames to get average
+        # self.pos[:,:,:] /= (self.velocities.shape[2])
+        # self.forces[:,:,:] /= (self.velocities.shape[2])  
+        
+        self.output_file_write("POSITIONS", self.pos)  
+        self.output_file_write("FORCES", self.forces)  
+        self.output_file_write("VELOCITIES", self.velocities)
     
     def solvate(self):
         """
@@ -432,7 +449,7 @@ class System(object):
         
         self.universe.load_new(self.struct)
         
-        self.output_file_write("MINIMIZED_POS", self.universe.atoms.positions)
+        self.output_file_write("ATOMIC_MINIMIZED_POSITIONS", self.universe.atoms.positions)
         [s.minimized() for s in self.subsystems]
             
 
@@ -531,8 +548,8 @@ C60 = {
     "beta_t":10.0,
     "top_args": {},
     "minimize":{"nsteps":1000},
-    "md":{"nsteps":1000},
-    "multi":8,
+    "md":{"nsteps":50000},
+    "multi":100,
     "equilibriate":{"nsteps":1000},
     "solvate":False,
     "top":"C60.top",
@@ -548,17 +565,83 @@ C2 = {
     "top_args": {},
     "minimize":{"nsteps":1000},
     "md":{"nsteps":100000},
-    "multi":10,
+    "multi":20,
     "equilibriate":{"nsteps":1000},
     "solvate":False,
     "top":"topol.top"
     } 
 
+Au = { 
+    'temperature' : 300.0, 
+    'struct': '/home/andy/tmp/Au/100.0_10.0.sol.pdb',
+    'top': '/home/andy/tmp/Au/100.0_10.0.top',
+    "subsystems" : [subsystems.RigidSubsystemFactory, "not resname SOL"],
+    "cg_steps":150,
+    "beta_t":10.0,
+    "top_args": {},
+    "minimize":{"nsteps":1000},
+    "md":{"nsteps":250000},
+    "multi":1,
+    "equilibriate":{"nsteps":1000},
+    "solvate":False,
+    "output_file":"100.0_10.0.hdf"
+    } 
+
+Au2 = { 
+    'pbc' : [100.0, 100.0, 100.0],
+    'temperature' : 300.0, 
+    'struct': '/home/andy/tmp/Au/{}.sol.pdb',
+    'top': '/home/andy/tmp/Au/{}.top',
+    "subsystems" : [subsystems.RigidSubsystemFactory, "not resname SOL"],
+    "cg_steps":150,
+    "beta_t":10.0,
+    "top_args": {},
+    "minimize":{"nsteps":1000},
+    "md":{"nsteps":250000},
+    "multi":1,
+    "equilibriate":{"nsteps":1000},
+    "solvate":False,
+    "output_file":"{}.hdf"
+    } 
+
+def test(fbase):
+    print(os.getcwd())
+    
+    logger = logging.getLogger()
+    logger.handlers[0].stream.close()
+    logger.removeHandler(logger.handlers[0])
+    
+    handler = logging.StreamHandler()
+
+
+
+    handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter("%(asctime)s %(filename)s, %(lineno)d, %(funcName)s: %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    #logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', filename=fbase + ".log",level=logging.DEBUG)
+    
+    Au2["struct"] = Au2["struct"].format(fbase)
+    Au2["top"] = Au2["top"].format(fbase)
+    Au2["output_file"] = Au2["output_file"].format(fbase)
+    
+    s=System(Au2)
+    
+    for ss in s.subsystems:
+        print(ss.atoms.masses())
+        
+    #s._write_system_struct()
+    
+    s._processes_trajectories(["/home/andy/Au/{}.trr".format(fbase)])
+    
+    
 
 def main():
     print(os.getcwd())
     
     s=System(C60)
+    
+    
     
     s.minimize()
     
@@ -568,12 +651,7 @@ def main():
     s.md()
     
 
-    
-    
-    
-    
 
-   
     
 def hdf2trr(pdb,hdf,trr):
     u = MDAnalysis.Universe(pdb)
@@ -598,7 +676,7 @@ def hdf2pdb(pdb,hdf,frame,pdb2):
     f.close()
 
 if __name__ == "__main__":
-    main()
+    test(sys.argv[1])
 
 
         

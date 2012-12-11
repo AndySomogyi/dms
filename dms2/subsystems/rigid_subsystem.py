@@ -6,7 +6,7 @@ Created on Oct 3, 2012
 import subsystems
 import MDAnalysis as mda
 
-from numpy import sum, newaxis
+from numpy import sum, newaxis, pi, sin, cos, arctan2
 
 class RigidSubsystem(subsystems.SubSystem):
     """
@@ -14,6 +14,14 @@ class RigidSubsystem(subsystems.SubSystem):
     orientation. 
     """
     def __init__(self, system, select):
+        """
+        Create a rigid subsystem.
+        @param system: an object (typically the system this subsystem belongs to)
+            which has the following attributes:
+                pbc: an array describing the periodic boundary conditions.
+        @param select: a select string used for Universe.selectAtoms which selects 
+            the atoms that make up this subsystem.
+        """
         self.system = system
         self.select = select
         
@@ -21,13 +29,18 @@ class RigidSubsystem(subsystems.SubSystem):
         self.atoms = universe.selectAtoms(self.select)
         
     def frame(self):
-        # the center of mass position 
-        pos = sum(self.atoms.positions*self.atoms.masses()[:,newaxis],axis=0)/self.atoms.totalMass()
+        # make a column vector
+        masses = self.atoms.masses()[:,newaxis]
+        # scaled positions, positions is natom * 3, pbc should be 3 vector.
+        spos = self.atoms.positions / self.system.pbc * 2.0 * pi
+        # get the x and y components, mass scale them, and add in cartesian space
+        cm = arctan2(sum(masses * sin(spos), axis=0), sum(masses * cos(spos), axis=0)) * self.system.pbc / 2.0 / pi
+        
         # the center of mass velocity
-        vel = sum(self.atoms.velocities()*self.atoms.masses()[:,newaxis],axis=0)/self.atoms.totalMass()
+        vel = sum(self.atoms.velocities() * masses,axis=0)/self.atoms.totalMass()
         # total force
         force = sum(self.atoms.forces,axis=0)
-        return (pos,vel,force)
+        return (cm,vel,force)
     
     def translate(self, values):
         self.atoms.positions += values
