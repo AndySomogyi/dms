@@ -1,8 +1,13 @@
-'''
-Created on Aug 8, 2012
+"""
+Functions for setting up and performing md calculations.
 
+All function arguments which refer to file input may be either a 
+string, in which they are interpreted as a file path, or a numpy array, in 
+which they are interpreted as data buffers containing the file bytes.
+
+Created on Aug 8, 2012
 @author: andy
-'''
+"""
 import os.path
 import os
 import time
@@ -16,7 +21,61 @@ import gromacs.run
 import config
 from collections import namedtuple
 from os import path
+from dms2.io import data_tofile
 import shutil
+
+from collections import Mapping, Hashable 
+
+
+class MDManager(Mapping, Hashable): 
+    __slots__ = ("__dict", "files", "dirname")
+
+    def __init__(self, *args, **kwargs): 
+        print("__init__")
+        self.__dict = dict(*args, **kwargs)
+        print(self.__dict) 
+        
+        if not self.__dict.has_key("dirname"):
+            raise ValueError("MDManager arguments must contain a \"dirname\" key")
+        
+        self.dirname = self.__dict["dirname"]
+        del self.__dict["dirname"]
+        
+        if not os.path.isdir(self.dirname):
+            raise IOError("dirname of {} is not a directory".format(self.dirname))
+        
+        # save the abs path, user could very likely change directories.
+        self.dirname = os.path.abspath(self.dirname)
+        self.files = [os.path.abspath(f) for f in self.__dict.values() if os.path.isfile(f)]
+
+    def __len__(self): 
+        return len(self.__dict) 
+
+    def __iter__(self): 
+        return iter(self.__dict) 
+
+    def __getitem__(self, key): 
+        return self.__dict[key] 
+
+    def __hash__(self): 
+        return hash(frozenset(self.__dict.iteritems())) 
+
+    def __repr__(self): 
+        return "MDManager({})".format(self.__dict) 
+    
+    def __enter__(self):
+        print("__enter__")
+        return self
+    
+    def __exit__(self, *args):
+        print("deleting {}".format(self.dirname))
+        #shutil.rmtree(self.dirname)
+
+        
+        
+def test(dirname):
+    return MDManager({'dirname':dirname})
+
 
 
 class MDrunnerLocal(gromacs.run.MDrunner):
@@ -69,7 +128,7 @@ def test_md(config, atoms):
     
     
 def MD(dirname='MD', **kwargs):
-    """Set up equilibrium MD.
+    """Set up, but don't actually run an equilibrium MD.
 
     Additional itp files should be in the same directory as the top file.
 
@@ -120,7 +179,7 @@ def MD(dirname='MD', **kwargs):
 
     :Returns: a dict that can be fed into :func:`gromacs.setup.MD`
               (but check, just in case, especially if you want to
-              change the *define* parameter in the mdp file)
+              change the *define* parameter in the mdp file)    
     """
 
     logging.info("[%(dirname)s] Setting up MD..." % vars())
@@ -163,7 +222,19 @@ def MD_config_get(conf, what):
     
 def minimize(struct, top, minimize_dir='em', minimize_mdp=config.templates['em.mdp'], 
              minimize_output='em.pdb', minimize_deffnm="em", mdrunner=MDrunnerLocal, **kwargs):
-    """Energy minimize the system.
+    """
+    Energy minimize a system.
+    
+    Creates the directory minimize_dir, and all operations are performed there. 
+    
+    @param struct: name of structure file
+    @param top: name of top file
+    
+    @return: a dictionary with the following values:
+        'struct': final_struct,
+        'top': topology,
+        'mainselection': mainselection,
+        'dirname': dir where minimization took place.
 
     This sets up the system (creates run input files) and also runs
     ``mdrun_d``. Thus it can take a while.
@@ -199,9 +270,17 @@ def minimize(struct, top, minimize_dir='em', minimize_mdp=config.templates['em.m
     .. note:: If :func:`~gromacs.mdrun_d` is not found, the function
               falls back to :func:`~gromacs.mdrun` instead.
     """
-    return gromacs.setup.energy_minimize(dirname=minimize_dir, mdp=minimize_mdp, struct=struct, 
+    
+    # gromacs.setup.energy_minimize returns
+    # { 'struct': final_struct,
+    #   'top': topology,
+    #   'mainselection': mainselection,
+    # }
+    result = gromacs.setup.energy_minimize(dirname=minimize_dir, mdp=minimize_mdp, struct=struct, 
                                          top=top, output=minimize_output, deffnm=minimize_deffnm, 
                                          mdrunner=mdrunner, **kwargs)
+    result["dirname"] = minimize_dir
+    return result
     
 def MD_restrained(dirname='MD_POSRES', **kwargs):
     """Set up MD with position restraints.
@@ -285,7 +364,7 @@ def MD_restrained(dirname='MD_POSRES', **kwargs):
     #kwargs.setdefault('nstxtcout', '5000')  # xtc pos
     kwargs.setdefault('mdp',config.templates['md_CHARMM27.mdp'])
     
-    return gromacs.setup._setup_MD(dirname, **kwargs)
+    return MDManager(gromacs.setup._setup_MD(dirname, **kwargs))
     
 
 md_defaults = {
@@ -339,19 +418,22 @@ def topology(struct, protein="protein", top=None, dirname="top", posres=None, ff
     """
     Generate a topology for a given structure.
     
-    @return a dict with the following keys: {"top", "struct", "posres"}, where
+    @return a dict with the following keys: {"top", "struct", "posres", "dirname"}, where
     the values are the file names of the resulting topology, structure, and position restraint files.
     """
     if top is None:
         logging.info("config did not specify a topology, autogenerating using pdb2gmx...")
         pdb2gmx_args = {"ff":ff, "water":water, "ignh":ignh}
         pdb2gmx_args.update(top_args)
+        struct = data_tofile(struct, "src.pdb", dirname=dirname)
         result = gromacs.setup.topology(struct, protein, "system.top", dirname, **pdb2gmx_args)
         result["posres"] = protein + "_posres.itp"
+        result["dirname"] = dirname
     else:
         logging.info("config specified a topology, \{\"top\":{}, \"struct\":{}\}".format(top, struct))
-        result={"top":top, "struct":struct, "posres":posres}
-    return result
+        result={"top":top, "struct":struct, "posres":posres, "dirname":None}
+    
+    return MDManager(result)
         
     
 def solvate(struct, top,
@@ -359,7 +441,7 @@ def solvate(struct, top,
             concentration=0, cation='NA', anion='CL',
             water='spc', solvent_name='SOL', with_membrane=False,
             ndx = 'main.ndx', mainselection = '"Protein"',
-            solvate_dir='solvate',
+            dirname='solvate',
             **kwargs):
     """Put protein into box, add water, add counter-ions.
 
@@ -433,12 +515,17 @@ def solvate(struct, top,
           changed in the mdp file.
 
     """
-    return gromacs.setup.solvate(struct, top,
+    struct = data_tofile(struct, "src.pdb", dirname=dirname)
+    top = data_tofile(top, "src.top", dirname=dirname)
+    result = gromacs.setup.solvate(struct, top,
             distance, boxtype,
             concentration, cation, anion,
             water, solvent_name, with_membrane,
             ndx, mainselection,
-            solvate_dir,  **kwargs)
+            dirname,  **kwargs)
+    result["dirname"] = dirname
+    
+    return MDManager(result)
     
     
 def run_MD(dirname, md_runner=gromacs.run.MDrunner, **kwargs):
@@ -487,12 +574,6 @@ def run_MD(dirname, md_runner=gromacs.run.MDrunner, **kwargs):
     
     return Result(files)
 
-def rm(fname):
-    try:
-        os.remove(fname)
-    except OSError:
-        logging.warn('could not remove {}'.format(fname))
-        
 def multi_files(dirname, deffnm, multi):
     """
     creates a list of filenames for a multi md simulation. 
@@ -536,13 +617,4 @@ def epic_fail():
         time.sleep(5)
         logging.critical("waiting for job to terminate...")
         
-def which(program):
-    """
-    determine the absolute path for a program,
-    python version of the unix 'which' command
-    """
-    for path in os.environ.get('PATH', '').split(':'):
-        if os.path.exists(os.path.join(path, program)) and \
-           not os.path.isdir(os.path.join(path, program)):
-            return os.path.join(path, program)
-    return None
+

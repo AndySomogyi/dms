@@ -32,7 +32,8 @@ import os
 
 from numpy import array, zeros, transpose, dot, reshape, \
                   average, arange, sqrt, linalg, conjugate, \
-                  real, correlate, newaxis, sum, mean, min, max, where
+                  real, correlate, newaxis, sum, mean, min, max, \
+                  where, pi, arctan2, sin, cos, fromfile, uint8
 import numpy.random
 import MDAnalysis
 
@@ -56,7 +57,9 @@ class System(object):
                       
     @ivar qtot = total charge, set by solvate
     @ivar mainselection = set by solvate, defaults to "Protein",
-    @ivar ndx = set by solvate, defaults to 'main.ndx'
+    @ivar ndx = the index file, set by solvate, defaults to 'main.ndx'
+    
+    @ivar subsystems: a list of subsystems
     """    
     
     # directories relative to current dir, where md will be performed.
@@ -71,9 +74,8 @@ class System(object):
     
 
     def __init__(self, config, nframe=None):      
-        """
-        a list of subsystems
-        """
+        
+        #a list of subsystems
         self.subsystems = None
         self.config = config
         self.pbc = array(config["pbc"])
@@ -83,10 +85,10 @@ class System(object):
         self.ndx = "main.ndx"
         self.mainselection = "Protein"
         
-        if self.config.has_key("output_file") and nframe is None:
-            self.output_file = h5py.File(self.config["output_file"], "w")
+        if self.config.has_key("hdf") and nframe is None:
+            self.hdf = h5py.File(self.config["hdf"], "w")
         else:
-            self.output_file = None
+            self.hdf = None
 
         # set (or create) the topology
         self._topology(config)
@@ -126,11 +128,15 @@ class System(object):
         logging.info("vel {}".format(self.velocities.shape))
 
         if nframe is not None:
-            self.read_frame(config["output_file"], nframe)
+            self.read_frame(config["hdf"], nframe)
             
     def _topology(self, config):
         """ 
-        set up the topology 
+        set up the topology.
+        if top is specified in config, it is used, otherwise a new one is created.
+        
+        @postcondition: self.top, self.struct, self.posres 
+        
         """
         # get the struct and top from config, generate if necessary
         if config.has_key("struct") and config.has_key("top"):
@@ -151,20 +157,23 @@ class System(object):
             self.posres = top["posres"]
             del top
             
+        self.key_fromfile("struct", top["struct"])
+        self.key_fromfile("top", top["top"])
+        self.key_fromfile("posres", top["posres"])
 
         
         
-    def output_file_write(self, name, value):
+    def hdf_write(self, name, value):
         """
         write a value to the output file using the given key at the current timestep.
         """
         
-        if self.output_file is not None:
-            keys = self.output_file.keys()
+        if self.hdf is not None:
+            keys = self.hdf.keys()
             if(keys.count(str(self.timestep))):
-                grp = self.output_file[str(self.timestep)]
+                grp = self.hdf[str(self.timestep)]
             else:
-                grp = self.output_file.create_group(str(self.timestep))
+                grp = self.hdf.create_group(str(self.timestep))
             try:
                 del grp[str(name)]
                 logging.info('cleared existing output file value of \"{}/{}\"'.format(self.timestep, name))
@@ -178,7 +187,7 @@ class System(object):
             else:
                 grp[str(name)] = value
     
-            self.output_file.flush()
+            self.hdf.flush()
         
     def run(self):
         for i in range(int(self.config["cg_steps"])):
@@ -212,12 +221,12 @@ class System(object):
         f = mean(self.forces, axis=0).flatten()
         Df = dot(D,f)
         
-        self.output_file_write("DIFFUSION", D)
+        self.hdf_write("DIFFUSION", D)
         
         for s in enumerate(self.subsystems):
             s[1].translate(Df[s[0]:s[0]+self.ncgs])
             
-        self.output_file_write("ATOMIC_POS", self.universe.atoms.positions)
+        self.hdf_write("ATOMIC_POS", self.universe.atoms.positions)
         
         # write to struct, for next time step.
         w = MDAnalysis.Writer(self.struct)
@@ -316,7 +325,7 @@ class System(object):
         
         self.universe.load_new(self.struct)
         
-        self.output_file_write("ATOMIC_EQUILIBRIATED_POSITIONS", self.universe.atoms.positions)
+        self.hdf_write("ATOMIC_EQUILIBRIATED_POSITIONS", self.universe.atoms.positions)
         
         [s.equilibriated() for s in self.subsystems]
         
@@ -368,9 +377,17 @@ class System(object):
         # self.pos[:,:,:] /= (self.velocities.shape[2])
         # self.forces[:,:,:] /= (self.velocities.shape[2])  
         
-        self.output_file_write("POSITIONS", self.pos)  
-        self.output_file_write("FORCES", self.forces)  
-        self.output_file_write("VELOCITIES", self.velocities)
+        self.hdf_write("POSITIONS", self.pos)  
+        self.hdf_write("FORCES", self.forces)  
+        self.hdf_write("VELOCITIES", self.velocities)
+        
+    def topology_changed(self):
+        """
+        Notify the system that the topology of the universe was changed. 
+        This causes the system to generate a new topology file, 
+        and notify all subsystems that the universe was changed.
+        """
+        pass
     
     def solvate(self):
         """
@@ -449,7 +466,7 @@ class System(object):
         
         self.universe.load_new(self.struct)
         
-        self.output_file_write("ATOMIC_MINIMIZED_POSITIONS", self.universe.atoms.positions)
+        self.hdf_write("ATOMIC_MINIMIZED_POSITIONS", self.universe.atoms.positions)
         [s.minimized() for s in self.subsystems]
             
 
@@ -477,6 +494,22 @@ class System(object):
         # 'nsteps': 1000}
         self.top =  '/home/andy/tmp/1OMB/top/system.top'
         self.struct = '/home/andy/tmp/1OMB/equlibriate/equilibriate.gro'
+        
+    def key_tofile(self, key, f, timestep=None):
+        """
+        """
+        timestep = self.timestep if timestep is None else timestep
+        data = self.hdf["{}/{}".format(timestep, key)][()]
+        data.tofile(f)
+        
+    def key_fromfile(self, key, f, timestep=None):
+        """
+        """
+        timestep = self.timestep if timestep is None else timestep
+        self.hdf["{}/{}".format(timestep,key)] = fromfile(f, dtype=uint8)
+        
+        
+        
     
         
 from numpy.fft import fft, ifft, fftshift
@@ -553,7 +586,7 @@ C60 = {
     "equilibriate":{"nsteps":1000},
     "solvate":False,
     "top":"C60.top",
-    "output_file":"out.hdf"
+    "hdf":"out.hdf"
     } 
 
 C2 = { 
@@ -584,7 +617,7 @@ Au = {
     "multi":1,
     "equilibriate":{"nsteps":1000},
     "solvate":False,
-    "output_file":"100.0_10.0.hdf"
+    "hdf":"100.0_10.0.hdf"
     } 
 
 Au2 = { 
@@ -601,7 +634,7 @@ Au2 = {
     "multi":1,
     "equilibriate":{"nsteps":1000},
     "solvate":False,
-    "output_file":"{}.hdf"
+    "hdf":"{}.hdf"
     } 
 
 def test(fbase):
@@ -623,7 +656,7 @@ def test(fbase):
     
     Au2["struct"] = Au2["struct"].format(fbase)
     Au2["top"] = Au2["top"].format(fbase)
-    Au2["output_file"] = Au2["output_file"].format(fbase)
+    Au2["hdf"] = Au2["hdf"].format(fbase)
     
     s=System(Au2)
     
@@ -674,6 +707,7 @@ def hdf2pdb(pdb,hdf,frame,pdb2):
     w.write(u)
     w.close()
     f.close()
+    
 
 if __name__ == "__main__":
     test(sys.argv[1])

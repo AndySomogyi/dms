@@ -6,7 +6,7 @@ Created on Oct 3, 2012
 import subsystems
 import MDAnalysis as mda
 
-from numpy import sum, newaxis, pi, sin, cos, arctan2
+from numpy import array, ones, sum, newaxis, pi, sin, cos, arctan2
 
 class RigidSubsystem(subsystems.SubSystem):
     """
@@ -32,9 +32,13 @@ class RigidSubsystem(subsystems.SubSystem):
         # make a column vector
         masses = self.atoms.masses()[:,newaxis]
         # scaled positions, positions is natom * 3, pbc should be 3 vector.
-        spos = self.atoms.positions / self.system.pbc * 2.0 * pi
+        # arctan2 has a range of (-pi, pi], so have to shift positions to 
+        # zero centered instead of box / 2 centered.
+        spos = self.atoms.positions / self.system.pbc * 2.0 * pi - pi
+        
         # get the x and y components, mass scale them, and add in cartesian space
-        cm = arctan2(sum(masses * sin(spos), axis=0), sum(masses * cos(spos), axis=0)) * self.system.pbc / 2.0 / pi
+        # shift back to box / 2 centered
+        cm = (arctan2(sum(masses * sin(spos), axis=0), sum(masses * cos(spos), axis=0)) + pi) * self.system.pbc / 2.0 / pi
         
         # the center of mass velocity
         vel = sum(self.atoms.velocities() * masses,axis=0)/self.atoms.totalMass()
@@ -50,6 +54,7 @@ class RigidSubsystem(subsystems.SubSystem):
     
     def equilibriated(self):
         pass
+    
     
     
 def RigidSubsystemFactory(system, *args):

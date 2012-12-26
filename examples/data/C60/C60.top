@@ -1,0 +1,12 @@
+; Include forcefield parameters
+
+#include "oplsaa.ff/forcefield.itp"
+#include "oplsaa.ff/spc.itp"
+#include "C60.itp"
+
+[ system ]
+C60 in water
+
+[ molecules ]
+C60         1
+SOL              1695
