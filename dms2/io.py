@@ -13,6 +13,7 @@ import gromacs.utilities as utilities
 import os.path  
 import shutil
 import numpy
+import MDAnalysis.core
 
 def data_tofile(data, fid, sep="", fmt="%s", dirname="."):
     """
@@ -27,20 +28,26 @@ def data_tofile(data, fid, sep="", fmt="%s", dirname="."):
     @param dirname
     @return: absolute path of the created file
         """ 
-    if type(data) is h5py.Dataset:
-        data = data[()]
-    
-    if type(data) is numpy.ndarray:  
-        with utilities.in_dir(dirname):
-            data.tofile(fid,sep,fmt)
-            return os.path.abspath(fid)
-    elif os.path.isfile(data):
-        src = os.path.abspath(data)
-        with utilities.in_dir(dirname):
-            shutil.copyfile(src, fid)
-            return os.path.abspath(fid)
-    else:
-        raise TypeError("expected either Dataset, ndarray or file path as src")
+    if data is not None:
+        if type(data) is h5py.Dataset:
+            data = data[()]
+            
+        elif os.path.isfile(data):
+            src = os.path.abspath(data)
+            with utilities.in_dir(dirname):
+                shutil.copyfile(src, fid)
+                return os.path.abspath(fid)
+        else:
+            with utilities.in_dir(dirname):
+                if type(data) is numpy.ndarray:  
+                    data.tofile(fid,sep,fmt)
+                if isinstance(data, MDAnalysis.core.AtomGroup.AtomGroup) or isinstance(data, MDAnalysis.core.AtomGroup.Universe):
+                    w = MDAnalysis.Writer(fid,numatoms=len(data.atoms))
+                    w.write(data)
+                    del w
+                else:
+                    raise TypeError("expected either Dataset, ndarray or file path as src")
+                return os.path.abspath(fid)
             
         
     

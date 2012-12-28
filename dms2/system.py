@@ -20,6 +20,28 @@ Config Dictionary Specification
                         the argname that mdrun takes, so used for consistency)
                 
     "equilibriate":{"nsteps":1000},
+    
+    @group hdf file structure:
+    All state variables of the system are saved in the hdf file, this is usefull for
+    restarting or debugging. All information required for a restart is saved in the hdf 
+    file. This means that ONLY the hdf file is required for a restart, nothing else. 
+    
+    The key names will correspond to the file name.
+    
+    All source files are copied into the "src_files" group. 
+    
+    The files used by the sytem are stored in the "files" group, however, 
+    all items in this group are soft links to either one of the source files, or
+    new files located in a timestep group.
+    
+    The files group will contain at a minimum:
+        struct.pdb
+        topol.top
+        index.ndx
+            
+    
+    
+    
                     
         
 """
@@ -66,11 +88,6 @@ class System(object):
     em_dir = "em"
     equilibriate_dir = "equlibriate"
     md_dir = "md"
-    
-    # file name of the 'system', all output will be written to this file name.
-    system_struct = "system.pdb"
-    
-    # scale factor for langevin equation 
     
 
     def __init__(self, config, nframe=None):      
@@ -306,6 +323,7 @@ class System(object):
         self._write_system_struct()
         
         logging.debug("calling md.MD_restrained with {}".format(conf))
+        # set up a restrained md run
         mdr = md.MD_restrained(**conf)
         logging.debug("md.MD_restrained returned with {}".format(mdr))
         
@@ -448,14 +466,11 @@ class System(object):
         self.universe is loaded with the minimized structure
         all subsystems are notified.
         """
-        conf = {"struct":System.system_struct, "top":self.top, 
+        conf = {"struct":self.universe, "top":self.top, 
                 "ndx":self.ndx, "mainselection":self.mainselection}
         conf.update(self.config.get("minimize", {}))
         mn = md.minimize(struct=self.struct, top=self.top)
-        
-        # write universe to disk, md input
-        self._write_system_struct()
-        
+                
         # output of minimize looks like:
         # {'top': '/home/andy/tmp/1OMB/top/system.top', 'mainselection': '"Protein"', 'struct': '/home/andy/tmp/1OMB/em/em.pdb'}
         
@@ -469,14 +484,6 @@ class System(object):
         self.hdf_write("ATOMIC_MINIMIZED_POSITIONS", self.universe.atoms.positions)
         [s.minimized() for s in self.subsystems]
             
-
-    def _write_system_struct(self):
-        """
-        write the state of self.universe to the file system
-        """
-        w = MDAnalysis.Writer(System.system_struct)
-        w.write(self.universe)
-        w.close()
         
     def read_frame(self, hdf, nframe):
         f = h5py.File(hdf, "r")
@@ -507,6 +514,21 @@ class System(object):
         """
         timestep = self.timestep if timestep is None else timestep
         self.hdf["{}/{}".format(timestep,key)] = fromfile(f, dtype=uint8)
+        
+        
+def __get_class( kls ):
+    """
+    given a fully qualified class name, i.e. "datetime.datetime", 
+    this loads the module and returns the class type. 
+    
+    the ctor on the class type can then be called to create an instance of the class.
+    """
+    parts = kls.split('.')
+    module = ".".join(parts[:-1])
+    m = __import__( module )
+    for comp in parts[1:]:
+        m = getattr(m, comp)            
+    return m
         
         
         
@@ -620,22 +642,7 @@ Au = {
     "hdf":"100.0_10.0.hdf"
     } 
 
-Au2 = { 
-    'pbc' : [100.0, 100.0, 100.0],
-    'temperature' : 300.0, 
-    'struct': '/home/andy/tmp/Au/{}.sol.pdb',
-    'top': '/home/andy/tmp/Au/{}.top',
-    "subsystems" : [subsystems.RigidSubsystemFactory, "not resname SOL"],
-    "cg_steps":150,
-    "beta_t":10.0,
-    "top_args": {},
-    "minimize":{"nsteps":1000},
-    "md":{"nsteps":250000},
-    "multi":1,
-    "equilibriate":{"nsteps":1000},
-    "solvate":False,
-    "hdf":"{}.hdf"
-    } 
+
 
 def test(fbase):
     print(os.getcwd())
@@ -666,10 +673,146 @@ def test(fbase):
     #s._write_system_struct()
     
     s._processes_trajectories(["/home/andy/Au/{}.trr".format(fbase)])
+
+Au2 = { 
+    'pbc' : [50.0, 50.0, 50.0],      
+    'temperature' : 300.0, 
+    'struct': '/home/andy/tmp/1OMB/1OMB.pdb',
+    "subsystem_class" : "dms2.subsystems.RigidSubsystemFactory",
+    "subsystem_select": "not resname SOL",
+    "cg_steps":150,
+    "beta_t":10.0,
+    "top_args": {},
+    "minimize_steps":{"nsteps":1000},
+    "md_steps":{"nsteps":250000},
+    "multi":1,
+    "equilibriate_steps":{"nsteps":1000},
+    "solvate":True,
+    "hdf":"{}.hdf"
+    } 
+    
+def ctest():
+    create_config(fid="test.hdf", **Au2)    
+
+def create_config(fid,
+                  struct,
+                  pbc,
+                  top = None,
+                  temperature = 300,
+                  subsystem_class = "dms2.subsystems.RigidSubsystemFactory",
+                  subsystem_select = "not resname SOL",
+                  cg_steps = 50,
+                  beta_t  = 10.0,
+                  minimize_steps = 1000,
+                  md_steps = 1000,
+                  multi = 1,
+                  equilibriate_steps = 1000,
+                  solvate = False,
+                  posres=None,
+                  **kwargs):
+    
+    import gromacs
+    
+    hdf = h5py.File(fid, "w")
+
+    conf = {}
+    src_files = hdf.create_group("src_files")
+    
+    def filedata_fromfile(keyname, filename):
+        try:
+            del src_files[str(keyname)]
+        except KeyError:
+            pass
+        src_files[str(keyname)] = fromfile(struct, dtype=uint8)
+    
+    try:
+        pbc = array(pbc) 
+        print("periodic boundary conditions: {}".format(pbc))
+        pbc /= 10.0 # convert Angstrom to Nm
+        conf["pbc"] = pbc
+    except Exception, e:
+        print("error reading periodic boundary conditions")
+        raise e
+    
+    try:
+        _ = __get_class(subsystem_class)
+        conf["subsystem_class"] = subsystem_class
+        print("subsystem_class: {}".format(subsystem_class))
+        
+    except Exception, e:
+        print("error creating subsystem_class, {}".format(e))
+        raise e
+    
+    try:
+        temperature = float(temperature)
+    except Exception, e:
+        print("error, temperature {} must be a numeric value".format(temperature))
+        raise e
+    
+    # check struct
+    try:
+        gromacs.gmxcheck(f=struct)
+        print("structure file {} appears OK".format(struct))
+        filedata_fromfile("struct.pdb", struct)
+    except Exception, e:
+        print("structure file {} is not valid".format(struct))
+        raise e
+    
+    # make a top if we don't have one
+    if top is None:
+        print("attempting to auto-generate a topology...")
+        with md.topology(struct=struct, protein="protein", posres=posres) as top:
+            # topology returns:
+            # {'top': '/home/andy/tmp/Au/top/system.top', 
+            # 'dirname': 'top', 
+            # 'posres': 'protein_posres.itp', 
+            # 'struct': '/home/andy/tmp/Au/top/protein.pdb'}
+            
+            print("succesfully auto-generated topology")
+            
+            filedata_fromfile("topol.top", top["top"])
+            filedata_fromfile("posres.itp", top["posres"])
+            
+            if solvate:
+                with md.solvate(box=pbc, **top) as sol:
+                    # solvate returns 
+                    # {'ndx': '/home/andy/tmp/Au/solvate/main.ndx', 
+                    # 'mainselection': '"Protein"', 
+                    # 'struct': '/home/andy/tmp/Au/solvate/solvated.pdb', 
+                    # 'qtot': 0})
+                    filedata_fromfile("index.ndx", sol["ndx"])
+                    filedata_fromfile("struct.pdb", sol["struct"])
+                    filedata_fromfile("topol.top", sol["top"])
+                    
+            
+            
+        
+        
+    
+    """
+
+    'top': '/home/andy/tmp/Au/{}.top',
+    "subsystem.class" : "dms2.subsystems.RigidSubsystemFactory",
+    "subsystem.args": "not resname SOL",
+    "cg_steps":150,
+    "beta_t":10.0,
+    "top_args": {},
+    "minimize":{"nsteps":1000},
+    "md":{"nsteps":250000},
+    "multi":1,
+    "equilibriate":{"nsteps":1000},
+    "solvate":False,
+    "hdf":"{}.hdf"
+    """
+    
+    
+        
     
     
 
 def main():
+    ctest()
+    """
     print(os.getcwd())
     
     s=System(C60)
@@ -682,6 +825,7 @@ def main():
     
     #s.test()
     s.md()
+    """
     
 
 
@@ -710,7 +854,7 @@ def hdf2pdb(pdb,hdf,frame,pdb2):
     
 
 if __name__ == "__main__":
-    test(sys.argv[1])
+    ctest()
 
 
         

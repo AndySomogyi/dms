@@ -28,7 +28,7 @@ from collections import Mapping, Hashable
 
 
 class MDManager(Mapping, Hashable): 
-    __slots__ = ("__dict", "files", "dirname")
+    __slots__ = ("__dict", "dirname")
 
     def __init__(self, *args, **kwargs): 
         print("__init__")
@@ -46,7 +46,6 @@ class MDManager(Mapping, Hashable):
         
         # save the abs path, user could very likely change directories.
         self.dirname = os.path.abspath(self.dirname)
-        self.files = [os.path.abspath(f) for f in self.__dict.values() if os.path.isfile(f)]
 
     def __len__(self): 
         return len(self.__dict) 
@@ -98,25 +97,7 @@ class MDrunnerLocal(gromacs.run.MDrunner):
 
         return ["mpiexec", "-n", "4"]
 
-class ResourceManager(object):
-    def __init__(self, files):
-        import types
-        self._files = files if isinstance(files, types.ListType) else [files]
-        
-    def  __enter__(self):
-        return self
-    
-    def __exit__(self, tp, value, traceback):
-        for f in self._files:
-            try:
-                #os.remove(f)
-                print("would have removed {}".format(f))
-            except OSError:
-                logging.warn('could not remove {}'.format(f))
-    
-    @property
-    def files(self):
-        return self._files
+
     
 def test_md(config, atoms):
 #    return ResourceManager("dpc_125_nvt.trr")
@@ -436,8 +417,7 @@ def topology(struct, protein="protein", top=None, dirname="top", posres=None, ff
     return MDManager(result)
         
     
-def solvate(struct, top,
-            distance=0.5, boxtype='cubic',
+def solvate(struct, top, box,
             concentration=0, cation='NA', anion='CL',
             water='spc', solvent_name='SOL', with_membrane=False,
             ndx = 'main.ndx', mainselection = '"Protein"',
@@ -518,12 +498,13 @@ def solvate(struct, top,
     struct = data_tofile(struct, "src.pdb", dirname=dirname)
     top = data_tofile(top, "src.top", dirname=dirname)
     result = gromacs.setup.solvate(struct, top,
-            distance, boxtype,
+            1.0, "cubic", 
             concentration, cation, anion,
             water, solvent_name, with_membrane,
             ndx, mainselection,
-            dirname,  **kwargs)
+            dirname, box="{} {} {}".format(*box))
     result["dirname"] = dirname
+    result["top"] = top
     
     return MDManager(result)
     
