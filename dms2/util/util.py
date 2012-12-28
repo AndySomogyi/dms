@@ -50,8 +50,3 @@ def data_tofile(data, fid, sep="", fmt="%s", dirname="."):
                 return os.path.abspath(fid)
             
         
-    
-    
-
-
-

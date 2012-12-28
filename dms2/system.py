@@ -62,6 +62,8 @@ import MDAnalysis
 import h5py #@UnresolvedImport
 import md
 import subsystems
+import util
+
 
 # change MDAnalysis table to read carbon correctly
 import MDAnalysis.topology.tables

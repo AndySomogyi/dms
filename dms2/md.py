@@ -21,7 +21,7 @@ import gromacs.run
 import config
 from collections import namedtuple
 from os import path
-from dms2.io import data_tofile
+from util import data_tofile
 import shutil
 
 from collections import Mapping, Hashable 
