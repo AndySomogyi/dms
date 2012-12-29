@@ -34,16 +34,30 @@ Config Dictionary Specification
     all items in this group are soft links to either one of the source files, or
     new files located in a timestep group.
     
-    The files group will contain at a minimum:
+    The "/files" group will contain at a minimum:
         struct.pdb
         topol.top
         index.ndx
+        
+    
+    "/timesteps" is a group which contains all timesteps, this has subgroups
+    names "0", "1", ... "N". 
+    
+    "/current_timestep" is a soft link to the timestep group currently being processed.
+    This will not exist on a newly created file.
+    
+    "/prev_timestep" is a soft link to the previously completed timestep. This is 
+    used for restarts. It will not exist on newly created files. 
+    
+    
+        
+    
+        
             
     
     
     
-                    
-        
+                 
 """
 
 
@@ -69,6 +83,17 @@ import util
 import MDAnalysis.topology.tables
 MDAnalysis.topology.tables.atomelements["C0"]="C"
 
+
+CURRENT_TIMESTEP = "current_timestep" 
+PREV_TIMESTEP = "prev_timestep"
+SRC_FILES = "src_files"
+FILE_DATA_LIST = ["struct.pdb", "topol.top", "index.ndx", "posres.itp"]
+TIMESTEPS = "timesteps"
+CONFIG = "config"
+STRUCT_PDB = "struct.pdb"
+TOPOL_TOP = "topol.top"
+INDEX_NDX = "index.ndx"
+
 class System(object):
     """
     @ivar top: name of the starting topology file.
@@ -86,13 +111,15 @@ class System(object):
     @ivar subsystems: a list of subsystems
     """    
     
-    # directories relative to current dir, where md will be performed.
-    em_dir = "em"
-    equilibriate_dir = "equlibriate"
-    md_dir = "md"
-    
+   
 
-    def __init__(self, config, nframe=None):      
+    def __init__(self, fid):      
+        
+        self.hdf = h5py.File(fid)
+        self.config = self.hdf[CONFIG]
+        
+        
+        """
         
         #a list of subsystems
         self.subsystems = None
@@ -148,6 +175,55 @@ class System(object):
 
         if nframe is not None:
             self.read_frame(config["hdf"], nframe)
+        """
+        
+    @property
+    def struct(self):
+        return self.hdf[CURRENT_TIMESTEP + "/" + STRUCT_PDB]
+    
+    @property
+    def top(self):
+        return self.hdf[CURRENT_TIMESTEP + "/" + TOPOL_TOP]
+    
+    def _begin_timestep(self):
+        """
+        The _begin_timestep and _end_timestep logic are modeled after OpenGL's glBegin and glEnd. 
+        the "current_timestep" link should only exist between calls 
+        to _begin_timestep and _end_timestep. The run may crash inbetween these
+        calls, in this case, we assume whatever is the contents of this timestep
+        is garbage and delete it.
+        """
+        # if there is a current timestep, we assume its garbage and delete it
+        if self.hdf.id.links.exists(CURRENT_TIMESTEP):
+            del self.hdf[CURRENT_TIMESTEP]
+        
+        self.hdf.create_group(CURRENT_TIMESTEP)
+            
+        # prev_timestep could only have been created with a valid _end_timestep            
+        src_files = self.hdf[PREV_TIMESTEP] if \
+            self.hdf.id.links.exists(PREV_TIMESTEP) else \
+            self.hdf[SRC_FILES]
+        
+        # link file data into current     
+        for f in FILE_DATA_LIST:
+            util.hdf_linksrc(self.hdf, CURRENT_TIMESTEP + "/" + f, src_files.name + "/" + f)
+            
+    def _end_timestep(self):
+        """
+        move current_timestep to timesteps/n
+        """
+        timesteps = [int(k) for k in self.hdf[TIMESTEPS].keys()]
+        prev = -1 if len(timesteps) == 0 else max(timesteps)
+        finished = TIMESTEPS + "/" + str(prev+1)
+        self.hdf.id.move(CURRENT_TIMESTEP, finished)
+        
+        # relink prev_timestep to the just finished ts.
+        if self.hdf.id.links.exists(PREV_TIMESTEP):
+            del self.hdf[PREV_TIMESTEP]
+        self.hdf.id.links.create_soft(PREV_TIMESTEP, finished)
+        
+        self.hdf.flush()
+            
             
     def _topology(self, config):
         """ 
@@ -220,6 +296,7 @@ class System(object):
         """
         do some stuff
         """
+        self._begin_timestep()
         
         # md - runs md with current state, reads in md output and populates 
         # segments statistics. 
@@ -231,6 +308,7 @@ class System(object):
         
         self.evolve()
         
+        self._end_timestep()
         logging.info("completed step {}".format(self.timestep))
         
         
@@ -471,7 +549,7 @@ class System(object):
         conf = {"struct":self.universe, "top":self.top, 
                 "ndx":self.ndx, "mainselection":self.mainselection}
         conf.update(self.config.get("minimize", {}))
-        mn = md.minimize(struct=self.struct, top=self.top)
+        mn = md.minimize(struct=self.universe, top=self.top)
                 
         # output of minimize looks like:
         # {'top': '/home/andy/tmp/1OMB/top/system.top', 'mainselection': '"Protein"', 'struct': '/home/andy/tmp/1OMB/em/em.pdb'}
@@ -677,7 +755,7 @@ def test(fbase):
     s._processes_trajectories(["/home/andy/Au/{}.trr".format(fbase)])
 
 Au2 = { 
-    'pbc' : [50.0, 50.0, 50.0],      
+    'box' : [50.0, 50.0, 50.0],      
     'temperature' : 300.0, 
     'struct': '/home/andy/tmp/1OMB/1OMB.pdb',
     "subsystem_class" : "dms2.subsystems.RigidSubsystemFactory",
@@ -685,10 +763,10 @@ Au2 = {
     "cg_steps":150,
     "beta_t":10.0,
     "top_args": {},
-    "minimize_steps":{"nsteps":1000},
-    "md_steps":{"nsteps":250000},
+    "minimize_steps":1000,
+    "md_steps":250000,
     "multi":1,
-    "equilibriate_steps":{"nsteps":1000},
+    "equilibriate_steps":1000,
     "solvate":True,
     "hdf":"{}.hdf"
     } 
@@ -698,7 +776,7 @@ def ctest():
 
 def create_config(fid,
                   struct,
-                  pbc,
+                  box,
                   top = None,
                   temperature = 300,
                   subsystem_class = "dms2.subsystems.RigidSubsystemFactory",
@@ -711,80 +789,109 @@ def create_config(fid,
                   equilibriate_steps = 1000,
                   solvate = False,
                   posres=None,
+                  ndx=None,
                   **kwargs):
     
     import gromacs
     
-    hdf = h5py.File(fid, "w")
+    with h5py.File(fid, "w") as hdf:
 
-    conf = {}
-    src_files = hdf.create_group("src_files")
-    
-    def filedata_fromfile(keyname, filename):
+        conf = hdf.create_group("config").attrs
+        src_files = hdf.create_group("src_files")
+
+        def filedata_fromfile(keyname, filename):
+            try:
+                del src_files[str(keyname)]
+            except KeyError:
+                pass
+            src_files[str(keyname)] = fromfile(struct, dtype=uint8)
+
+        def int_attr(keyname, value):
+            try:
+                conf[keyname] = int(value)
+            except Exception, e:
+                print("error, {} {} must be a numeric value".format(keyname, value))
+                raise e
         try:
-            del src_files[str(keyname)]
-        except KeyError:
-            pass
-        src_files[str(keyname)] = fromfile(struct, dtype=uint8)
-    
-    try:
-        pbc = array(pbc) 
-        print("periodic boundary conditions: {}".format(pbc))
-        pbc /= 10.0 # convert Angstrom to Nm
-        conf["pbc"] = pbc
-    except Exception, e:
-        print("error reading periodic boundary conditions")
-        raise e
-    
-    try:
-        _ = __get_class(subsystem_class)
-        conf["subsystem_class"] = subsystem_class
-        print("subsystem_class: {}".format(subsystem_class))
+            box = array(box) 
+            print("periodic boundary conditions: {}".format(box))
+            box /= 10.0 # convert Angstrom to Nm
+            conf["box"] = box
+        except Exception, e:
+            print("error reading periodic boundary conditions")
+            raise e
+
+        try:
+            _ = __get_class(subsystem_class)
+            conf["subsystem_class"] = subsystem_class
+            print("subsystem_class: {}".format(subsystem_class))
+
+        except Exception, e:
+            print("error creating subsystem_class, {}".format(e))
+            raise e
+
+        try:
+            conf["temperature"] = float(temperature)
+        except Exception, e:
+            print("error, temperature {} must be a numeric value".format(temperature))
+            raise e
+
+        int_attr("cg_steps", cg_steps)
+        int_attr("beta_t", beta_t)
+        int_attr("minimize_steps", minimize_steps)
+        int_attr("md_steps", md_steps)
+        int_attr("multi", multi)
+        int_attr("equilibriate_steps", equilibriate_steps)
+        int_attr("solvate", solvate)
+
+        # check struct
+        try:
+            gromacs.gmxcheck(f=struct)
+            print("structure file {} appears OK".format(struct))
+            filedata_fromfile("struct.pdb", struct)
+        except Exception, e:
+            print("structure file {} is not valid".format(struct))
+            raise e
+
+        # make a top if we don't have one
+        if top is None:
+            print("attempting to auto-generate a topology...")
+            with md.topology(struct=struct, protein="protein", posres=posres) as top:
+                # topology returns:
+                # {'top': '/home/andy/tmp/Au/top/system.top', 
+                # 'dirname': 'top', 
+                # 'posres': 'protein_posres.itp', 
+                # 'struct': '/home/andy/tmp/Au/top/protein.pdb'}
+
+                print("succesfully auto-generated topology")
+
+                filedata_fromfile("topol.top", top["top"])
+                filedata_fromfile("posres.itp", top["posres"])
+
+                if solvate:
+                    with md.solvate(box=box, **top) as sol:
+                        # solvate returns 
+                        # {'ndx': '/home/andy/tmp/Au/solvate/main.ndx', 
+                        # 'mainselection': '"Protein"', 
+                        # 'struct': '/home/andy/tmp/Au/solvate/solvated.pdb', 
+                        # 'qtot': 0})
+                        filedata_fromfile("index.ndx", sol["ndx"])
+                        filedata_fromfile("struct.pdb", sol["struct"])
+                        filedata_fromfile("topol.top", sol["top"])
+
+        if posres is not None:
+            filedata_fromfile("posres.itp", posres)
+
+        if ndx is not None:
+            filedata_fromfile("index.ndx", ndx)
+
+        # link required file data
+        files = hdf.create_group("files")
+        for f in ["struct.pdb", "topol.top", "index.ndx", "posres.itp"]:
+            files[f] = h5py.SoftLink("/src_files/" + f)
+            
+        hdf.create_group("timesteps")
         
-    except Exception, e:
-        print("error creating subsystem_class, {}".format(e))
-        raise e
-    
-    try:
-        temperature = float(temperature)
-    except Exception, e:
-        print("error, temperature {} must be a numeric value".format(temperature))
-        raise e
-    
-    # check struct
-    try:
-        gromacs.gmxcheck(f=struct)
-        print("structure file {} appears OK".format(struct))
-        filedata_fromfile("struct.pdb", struct)
-    except Exception, e:
-        print("structure file {} is not valid".format(struct))
-        raise e
-    
-    # make a top if we don't have one
-    if top is None:
-        print("attempting to auto-generate a topology...")
-        with md.topology(struct=struct, protein="protein", posres=posres) as top:
-            # topology returns:
-            # {'top': '/home/andy/tmp/Au/top/system.top', 
-            # 'dirname': 'top', 
-            # 'posres': 'protein_posres.itp', 
-            # 'struct': '/home/andy/tmp/Au/top/protein.pdb'}
-            
-            print("succesfully auto-generated topology")
-            
-            filedata_fromfile("topol.top", top["top"])
-            filedata_fromfile("posres.itp", top["posres"])
-            
-            if solvate:
-                with md.solvate(box=pbc, **top) as sol:
-                    # solvate returns 
-                    # {'ndx': '/home/andy/tmp/Au/solvate/main.ndx', 
-                    # 'mainselection': '"Protein"', 
-                    # 'struct': '/home/andy/tmp/Au/solvate/solvated.pdb', 
-                    # 'qtot': 0})
-                    filedata_fromfile("index.ndx", sol["ndx"])
-                    filedata_fromfile("struct.pdb", sol["struct"])
-                    filedata_fromfile("topol.top", sol["top"])
                     
             
             

@@ -49,4 +49,21 @@ def data_tofile(data, fid, sep="", fmt="%s", dirname="."):
                     raise TypeError("expected either Dataset, ndarray or file path as src")
                 return os.path.abspath(fid)
             
+            
+def hdf_linksrc(hdf, newname, src):
+    """
+    if src is a soft link, follow it's target until we get to a non-linked object, and
+    create the new link to point to this head object.
+    """
+    
+    try:
+        while True:
+            src = hdf.id.links.get_val(src)
+    except TypeError:
+        pass
+    
+    print("links.create_soft({}, {})".format(newname, src))
+    hdf.id.links.create_soft(newname, src)
+        
+        
         
