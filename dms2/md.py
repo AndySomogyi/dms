@@ -201,7 +201,7 @@ def MD_config_get(conf, what):
     return result
 
     
-def minimize(struct, top, minimize_dir='em', minimize_mdp=config.templates['em.mdp'], 
+def minimize(struct, top, dirname='em', minimize_mdp=config.templates['em.mdp'], 
              minimize_output='em.pdb', minimize_deffnm="em", mdrunner=MDrunnerLocal, **kwargs):
     """
     Energy minimize a system.
@@ -252,16 +252,19 @@ def minimize(struct, top, minimize_dir='em', minimize_mdp=config.templates['em.m
               falls back to :func:`~gromacs.mdrun` instead.
     """
     
+    struct = data_tofile(struct, "src.pdb", dirname=dirname)
+    top = data_tofile(top, "src.top", dirname=dirname)
+    
     # gromacs.setup.energy_minimize returns
     # { 'struct': final_struct,
     #   'top': topology,
     #   'mainselection': mainselection,
     # }
-    result = gromacs.setup.energy_minimize(dirname=minimize_dir, mdp=minimize_mdp, struct=struct, 
+    result = gromacs.setup.energy_minimize(dirname=dirname, mdp=minimize_mdp, struct=struct, 
                                          top=top, output=minimize_output, deffnm=minimize_deffnm, 
                                          mdrunner=mdrunner, **kwargs)
-    result["dirname"] = minimize_dir
-    return result
+    result["dirname"] = dirname
+    return MDManager(result)
     
 def MD_restrained(dirname='MD_POSRES', **kwargs):
     """Set up MD with position restraints.
@@ -408,7 +411,7 @@ def topology(struct, protein="protein", top=None, dirname="top", posres=None, ff
         pdb2gmx_args.update(top_args)
         struct = data_tofile(struct, "src.pdb", dirname=dirname)
         result = gromacs.setup.topology(struct, protein, "system.top", dirname, **pdb2gmx_args)
-        result["posres"] = protein + "_posres.itp"
+        result["posres"] = path.abspath(path.join(dirname, protein + "_posres.itp"))
         result["dirname"] = dirname
     else:
         logging.info("config specified a topology, \{\"top\":{}, \"struct\":{}\}".format(top, struct))

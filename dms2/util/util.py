@@ -29,19 +29,22 @@ def data_tofile(data, fid, sep="", fmt="%s", dirname="."):
     @return: absolute path of the created file
         """ 
     if data is not None:
-        if type(data) is h5py.Dataset:
-            data = data[()]
+        
             
-        elif os.path.isfile(data):
+        if isinstance(data, str) and os.path.isfile(data):
             src = os.path.abspath(data)
             with utilities.in_dir(dirname):
                 shutil.copyfile(src, fid)
                 return os.path.abspath(fid)
         else:
             with utilities.in_dir(dirname):
+                if type(data) is h5py.Dataset:
+                    data = data[()]
                 if type(data) is numpy.ndarray:  
                     data.tofile(fid,sep,fmt)
-                if isinstance(data, MDAnalysis.core.AtomGroup.AtomGroup) or isinstance(data, MDAnalysis.core.AtomGroup.Universe):
+                elif isinstance(data, MDAnalysis.core.AtomGroup.AtomGroup) or isinstance(data, MDAnalysis.core.AtomGroup.Universe):
+                    print("pwd", os.path.curdir)
+                    print("fid", fid)
                     w = MDAnalysis.Writer(fid,numatoms=len(data.atoms))
                     w.write(data)
                     del w
@@ -58,12 +61,28 @@ def hdf_linksrc(hdf, newname, src):
     
     try:
         while True:
+            print(1,src)
             src = hdf.id.links.get_val(src)
-    except TypeError:
+            print(2,src)
+    except (TypeError, KeyError):
         pass
     
     print("links.create_soft({}, {})".format(newname, src))
     hdf.id.links.create_soft(newname, src)
+    
+def get_class( klass ):
+    """
+    given a fully qualified class name, i.e. "datetime.datetime", 
+    this loads the module and returns the class type. 
+    
+    the ctor on the class type can then be called to create an instance of the class.
+    """
+    parts = klass.split('.')
+    module = ".".join(parts[:-1])
+    m = __import__( module )
+    for comp in parts[1:]:
+        m = getattr(m, comp)            
+    return m
         
         
         

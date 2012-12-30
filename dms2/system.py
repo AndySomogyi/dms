@@ -49,6 +49,16 @@ Config Dictionary Specification
     "/prev_timestep" is a soft link to the previously completed timestep. This is 
     used for restarts. It will not exist on newly created files. 
     
+    The "/timesteps" group has a series of timestep groups named 0, 1, ... N.
+    Each one of these timestep subgroups contains the following data 
+    
+        struct.pdb: this is typically a soft link to the struct.pdb 
+        in "/src_files". This is only used as a way to store the non-coordinate
+        attributes such as segment and residue info. The coordinates in this
+        pdb are NOT USED to store coordinate info.
+        
+        
+    
     
         
     
@@ -71,6 +81,7 @@ from numpy import array, zeros, transpose, dot, reshape, \
                   real, correlate, newaxis, sum, mean, min, max, \
                   where, pi, arctan2, sin, cos, fromfile, uint8
 import numpy.random
+import tempfile
 import MDAnalysis
 
 import h5py #@UnresolvedImport
@@ -93,14 +104,23 @@ CONFIG = "config"
 STRUCT_PDB = "struct.pdb"
 TOPOL_TOP = "topol.top"
 INDEX_NDX = "index.ndx"
+CG_STEPS = "cg_steps"
+BETA_T = "beta_t"
+MN_STEPS = "mn_steps"
+EQ_STEPS = "eq_steps"
+MD_STEPS = "md_steps"
+MN_ARGS = "mn_args"
+EQ_ARGS = "eq_args"
+MD_ARGS = "md_args"
+MULTI= "multi"
+SOLVATE="solvate"
+POSRES_ITP="posres.itp"
+SUBSYSTEM_FACTORY = "subsystem_factory"
+SUBSYSTEM_SELECTS = "subsystem_selects"
+SUBSYSTEM_ARGS = "subsystem_args"
 
 class System(object):
     """
-    @ivar top: name of the starting topology file.
-    @ivar struct: name of the starting structure file. 
-    @ivar posres: name of the current position restraint include file.
-    
-    @ivar ncgs: the number of coarse grained variables
     @ivar subsystems: a list of subsystems, remains constant so long 
                       as the topology does not change.
                       
@@ -109,6 +129,9 @@ class System(object):
     @ivar ndx = the index file, set by solvate, defaults to 'main.ndx'
     
     @ivar subsystems: a list of subsystems
+    
+    @ivar _universe: an MDAnalysis Universe object that maintains the atomic 
+    state. 
     """    
     
    
@@ -116,7 +139,16 @@ class System(object):
     def __init__(self, fid):      
         
         self.hdf = h5py.File(fid)
-        self.config = self.hdf[CONFIG]
+        self.config = self.hdf[CONFIG].attrs
+        self.universe = self._universe_from_hdf()
+        
+        # load the subsystems
+        # this list will remain constant as long as the topology remains constant.
+        logging.info("creating subsystems")
+        factory = util.get_class(self.config[SUBSYSTEM_FACTORY])
+        self.ncgs, self.subsystems = factory(self, self.config[SUBSYSTEM_SELECTS], *self.config[SUBSYSTEM_ARGS])
+        logging.debug("using {} subsystems and {} coarse grained vars".format(self.subsystems, self.ncgs))
+        
         
         
         """
@@ -139,13 +171,7 @@ class System(object):
         # set (or create) the topology
         self._topology(config)
             
-        # load the subsystems
-        # this list will remain constant as long as the topology remains constant.
-        logging.info("creating subsystems")
-        sslist = config["subsystems"]
         
-        # python for ((car sslist) (cdr sslist))
-        self.ncgs, self.subsystems = sslist[0](self, *sslist[1:])
             
             
         # solvate the system (if the config says so)
@@ -223,6 +249,42 @@ class System(object):
         self.hdf.id.links.create_soft(PREV_TIMESTEP, finished)
         
         self.hdf.flush()
+        
+    def _universe_from_hdf(self, key = None):
+        """
+        returns a Universe object from a structure file stored as a 
+        blob in the hdf file.
+        """
+        #fname = tempfile.gettempdir() + "/" + tempfile.gettempprefix() + ".pdb"
+        #
+        #
+        import shutil
+        data = None
+        
+        if key is None:
+            # check if restart, use from current timestep
+            if self.hdf.id.links.exists(CURRENT_TIMESTEP):
+                logging.debug("_universe_from_hdf, found struct.pdb in current frame, loading.")
+                data = array(self.hdf[CURRENT_TIMESTEP + "/" + STRUCT_PDB])
+            else:
+                logging.debug("_universe_from_hdf, struct.pdb not in current frame, loading from src_files")
+                data = array(self.hdf[SRC_FILES + "/" + STRUCT_PDB])  
+        else:
+            data = array(self.hdf[key])
+        
+        with tempfile.NamedTemporaryFile(suffix=".pdb") as f:  
+            print("data.tofile(\"_universe_from_hdf.pdb\") ")
+            data.tofile("_universe_from_hdf.pdb") 
+            
+            data.tofile(f.file)
+            f.file.flush()
+            u = MDAnalysis.Universe(f.name)
+            shutil.copyfile(f.name, "_universe_from_hdf.temp.pdb")
+            w=MDAnalysis.Writer("_universe_from_hdf.unv.pdb")
+            w.write(u)
+            w.close()
+            return u
+            
             
             
     def _topology(self, config):
@@ -539,30 +601,20 @@ class System(object):
         
         @precondition: 
         self.universe contains the current atomic state
-        self.top refers to a top file
         
         @postcondition: 
-        self.struct now refers to minimized structure
         self.universe is loaded with the minimized structure
         all subsystems are notified.
         """
-        conf = {"struct":self.universe, "top":self.top, 
-                "ndx":self.ndx, "mainselection":self.mainselection}
-        conf.update(self.config.get("minimize", {}))
-        mn = md.minimize(struct=self.universe, top=self.top)
-                
-        # output of minimize looks like:
-        # {'top': '/home/andy/tmp/1OMB/top/system.top', 'mainselection': '"Protein"', 'struct': '/home/andy/tmp/1OMB/em/em.pdb'}
+        with md.minimize(struct=self.universe, top=self.top, nsteps=self.config[MN_STEPS]) as mn:
+
+            
+            print(mn)
         
-        self.struct = mn["struct"]
-        self.mainselection = mn["mainselection"]
-        self.top = mn["top"]
-        print(mn)
+            self.universe.load_new(mn["struct"])
         
-        self.universe.load_new(self.struct)
-        
-        self.hdf_write("ATOMIC_MINIMIZED_POSITIONS", self.universe.atoms.positions)
-        [s.minimized() for s in self.subsystems]
+            #self.hdf_write("ATOMIC_MINIMIZED_POSITIONS", self.universe.atoms.positions)
+            [s.minimized() for s in self.subsystems]
             
         
     def read_frame(self, hdf, nframe):
@@ -596,19 +648,7 @@ class System(object):
         self.hdf["{}/{}".format(timestep,key)] = fromfile(f, dtype=uint8)
         
         
-def __get_class( kls ):
-    """
-    given a fully qualified class name, i.e. "datetime.datetime", 
-    this loads the module and returns the class type. 
-    
-    the ctor on the class type can then be called to create an instance of the class.
-    """
-    parts = kls.split('.')
-    module = ".".join(parts[:-1])
-    m = __import__( module )
-    for comp in parts[1:]:
-        m = getattr(m, comp)            
-    return m
+
         
         
         
@@ -722,7 +762,7 @@ Au = {
     "hdf":"100.0_10.0.hdf"
     } 
 
-
+"""
 
 def test(fbase):
     print(os.getcwd())
@@ -753,12 +793,12 @@ def test(fbase):
     #s._write_system_struct()
     
     s._processes_trajectories(["/home/andy/Au/{}.trr".format(fbase)])
+"""
 
 Au2 = { 
     'box' : [50.0, 50.0, 50.0],      
     'temperature' : 300.0, 
     'struct': '/home/andy/tmp/1OMB/1OMB.pdb',
-    "subsystem_class" : "dms2.subsystems.RigidSubsystemFactory",
     "subsystem_select": "not resname SOL",
     "cg_steps":150,
     "beta_t":10.0,
@@ -767,26 +807,27 @@ Au2 = {
     "md_steps":250000,
     "multi":1,
     "equilibriate_steps":1000,
-    "solvate":True,
-    "hdf":"{}.hdf"
+    "solvate":False,
     } 
     
-def ctest():
-    create_config(fid="test.hdf", **Au2)    
+def ctest(pdb, hdf):
+    Au2['struct'] = pdb
+    create_config(fid=hdf, **Au2)    
 
 def create_config(fid,
                   struct,
                   box,
                   top = None,
                   temperature = 300,
-                  subsystem_class = "dms2.subsystems.RigidSubsystemFactory",
-                  subsystem_select = "not resname SOL",
+                  subsystem_factory = "dms2.subsystems.RigidSubsystemFactory",
+                  subsystem_selects = ["not resname SOL"],
+                  subsystem_args = [],
                   cg_steps = 50,
                   beta_t  = 10.0,
-                  minimize_steps = 1000,
+                  mn_steps = 1000,
                   md_steps = 1000,
                   multi = 1,
-                  equilibriate_steps = 1000,
+                  eq_steps = 1000,
                   solvate = False,
                   posres=None,
                   ndx=None,
@@ -804,7 +845,7 @@ def create_config(fid,
                 del src_files[str(keyname)]
             except KeyError:
                 pass
-            src_files[str(keyname)] = fromfile(struct, dtype=uint8)
+            src_files[str(keyname)] = fromfile(filename, dtype=uint8)
 
         def int_attr(keyname, value):
             try:
@@ -822,9 +863,19 @@ def create_config(fid,
             raise e
 
         try:
-            _ = __get_class(subsystem_class)
-            conf["subsystem_class"] = subsystem_class
-            print("subsystem_class: {}".format(subsystem_class))
+            factory = util.get_class(subsystem_factory)
+            test_ncgs, test_ss = factory(None, subsystem_selects, *subsystem_args)
+            if len(test_ss) == len(subsystem_selects):
+                print("subsystem factory {} produces correct number of subsystems from {}".
+                      format(subsystem_factory, subsystem_selects))
+                print("will use {} coarse grained variables".format(test_ncgs))
+            else:
+                raise ValueError("subsystem factory {} is valid, but does NOT produce correct number of subsystems from {}".
+                      format(subsystem_factory, subsystem_selects))
+            conf[SUBSYSTEM_FACTORY] = subsystem_factory
+            conf[SUBSYSTEM_SELECTS] = subsystem_selects
+            conf[SUBSYSTEM_ARGS] = subsystem_args
+            print("{}: {}".format(SUBSYSTEM_FACTORY, subsystem_factory))
 
         except Exception, e:
             print("error creating subsystem_class, {}".format(e))
@@ -836,13 +887,13 @@ def create_config(fid,
             print("error, temperature {} must be a numeric value".format(temperature))
             raise e
 
-        int_attr("cg_steps", cg_steps)
-        int_attr("beta_t", beta_t)
-        int_attr("minimize_steps", minimize_steps)
-        int_attr("md_steps", md_steps)
-        int_attr("multi", multi)
-        int_attr("equilibriate_steps", equilibriate_steps)
-        int_attr("solvate", solvate)
+        int_attr(CG_STEPS, cg_steps)
+        int_attr(BETA_T, beta_t)
+        int_attr(MN_STEPS, mn_steps)
+        int_attr(MD_STEPS, md_steps)
+        int_attr(MULTI, multi)
+        int_attr(EQ_STEPS, eq_steps)
+        int_attr(SOLVATE, solvate)
 
         # check struct
         try:
@@ -864,9 +915,13 @@ def create_config(fid,
                 # 'struct': '/home/andy/tmp/Au/top/protein.pdb'}
 
                 print("succesfully auto-generated topology")
+                
+                print('pwd', os.getcwd())
+                print('top', top)
 
-                filedata_fromfile("topol.top", top["top"])
-                filedata_fromfile("posres.itp", top["posres"])
+                filedata_fromfile(TOPOL_TOP, top["top"])
+                filedata_fromfile(POSRES_ITP, top["posres"])
+                filedata_fromfile(STRUCT_PDB, top["struct"])
 
                 if solvate:
                     with md.solvate(box=box, **top) as sol:
@@ -875,9 +930,9 @@ def create_config(fid,
                         # 'mainselection': '"Protein"', 
                         # 'struct': '/home/andy/tmp/Au/solvate/solvated.pdb', 
                         # 'qtot': 0})
-                        filedata_fromfile("index.ndx", sol["ndx"])
-                        filedata_fromfile("struct.pdb", sol["struct"])
-                        filedata_fromfile("topol.top", sol["top"])
+                        filedata_fromfile(INDEX_NDX, sol["ndx"])
+                        filedata_fromfile(STRUCT_PDB, sol["struct"])
+                        filedata_fromfile(TOPOL_TOP, sol["top"])
 
         if posres is not None:
             filedata_fromfile("posres.itp", posres)
@@ -885,10 +940,6 @@ def create_config(fid,
         if ndx is not None:
             filedata_fromfile("index.ndx", ndx)
 
-        # link required file data
-        files = hdf.create_group("files")
-        for f in ["struct.pdb", "topol.top", "index.ndx", "posres.itp"]:
-            files[f] = h5py.SoftLink("/src_files/" + f)
             
         hdf.create_group("timesteps")
         
@@ -920,7 +971,9 @@ def create_config(fid,
     
 
 def main():
-    ctest()
+    
+    import dms2.subsystems
+    #ctest()
     """
     print(os.getcwd())
     
@@ -961,9 +1014,18 @@ def hdf2pdb(pdb,hdf,frame,pdb2):
     w.close()
     f.close()
     
+def test():
+    print __name__
+    
 
 if __name__ == "__main__":
-    ctest()
+    if len(sys.argv) == 3:
+        ctest(sys.argv[1], sys.argv[2])
+    else:
+    #import subsystems
+        s=System("test.hdf")
+        s._begin_timestep()
+        s.minimize()
 
 
         

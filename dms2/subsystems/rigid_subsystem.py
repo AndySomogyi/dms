@@ -57,5 +57,5 @@ class RigidSubsystem(subsystems.SubSystem):
     
     
     
-def RigidSubsystemFactory(system, *args):
-    return (3, [RigidSubsystem(system, arg) for arg in args])
+def RigidSubsystemFactory(system, selects, *args):
+    return (3, [RigidSubsystem(system, select, *args) for select in selects])
