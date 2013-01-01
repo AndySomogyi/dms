@@ -119,7 +119,46 @@ SUBSYSTEM_FACTORY = "subsystem_factory"
 SUBSYSTEM_SELECTS = "subsystem_selects"
 SUBSYSTEM_ARGS = "subsystem_args"
 
+class Timestep(object):
+    """
+    each timestep is storred in a hdf group, this class wraps
+    the group and provides properties to access the values.
+    """
+    ATOMIC_MINIMIZED_POSITIONS = "atomic_minimized_positions"
+    ATOMIC_EQUILIBRIATED_POSITIONS = "atomic_equilibriated_positions"
+    TIMESTEP_BEGIN = "timestep_begin"
+    TIMESTEP_END = "timestep_end" 
+    CG_POSITIONS = "cg_positions"
+    CG_VELOCITIES = "cg_velocities"    
+    CG_FORCES = "cg_forces"
+    
+    def __create_property(self, name):
+        def getter(self):
+            return self._group[name][()]
+        def setter(self,val):
+            try:
+                del self._group[name]
+            except KeyError:
+                pass
+            self._group[name] = val
+            self._group.file.flush()
+            
+        # construct property attribute and add it to the class
+        setattr(self.__class__, name, property(fget=getter, fset=setter))
+    
+    def __init__(self, group):
+        self._group = group
+        self.__create_property(Timestep.ATOMIC_MINIMIZED_POSITIONS)
+        self.__create_property(Timestep.ATOMIC_EQUILIBRIATED_POSITIONS)
+        self.__create_property(Timestep.TIMESTEP_END)
+        self.__create_property(Timestep.TIMESTEP_BEGIN)
+        self.__create_property(Timestep.CG_POSITIONS)
+        self.__create_property(Timestep.CG_VELOCITIES)
+        self.__create_property(Timestep.CG_FORCES)
+        
 class System(object):
+
+
     """
     @ivar subsystems: a list of subsystems, remains constant so long 
                       as the topology does not change.
@@ -133,6 +172,12 @@ class System(object):
     @ivar _universe: an MDAnalysis Universe object that maintains the atomic 
     state. 
     """    
+    
+
+        
+
+            
+        
     
    
 
@@ -211,7 +256,7 @@ class System(object):
     def top(self):
         return self.hdf[CURRENT_TIMESTEP + "/" + TOPOL_TOP]
     
-    def _begin_timestep(self):
+    def begin_timestep(self):
         """
         The _begin_timestep and _end_timestep logic are modeled after OpenGL's glBegin and glEnd. 
         the "current_timestep" link should only exist between calls 
@@ -234,7 +279,7 @@ class System(object):
         for f in FILE_DATA_LIST:
             util.hdf_linksrc(self.hdf, CURRENT_TIMESTEP + "/" + f, src_files.name + "/" + f)
             
-    def _end_timestep(self):
+    def end_timestep(self):
         """
         move current_timestep to timesteps/n
         """
@@ -249,6 +294,10 @@ class System(object):
         self.hdf.id.links.create_soft(PREV_TIMESTEP, finished)
         
         self.hdf.flush()
+        
+    @property
+    def current_timestep(self):
+        return Timestep(self.hdf[CURRENT_TIMESTEP])
         
     def _universe_from_hdf(self, key = None):
         """
@@ -409,33 +458,27 @@ class System(object):
         
         logging.debug("starting System.md()")
 
-        conf = {"struct":System.system_struct, 
-                "top":self.top, 
-                "dirname":System.md_dir, 
-                "multi":self.pos.shape[0],
-                "deffnm":"md"}
-        conf.update(self.config.get("md", {}))
+        #conf = {
+        #conf.update(self.config.get("md", {}))
         
-        self._write_system_struct()
+     
         
-        logging.debug("calling md.MD with {}".format(conf))
-        mdr = md.MD(**conf)
-        logging.debug("md.MD returned with {}".format(mdr))
+        #logging.debug("calling md.MD with {}".format(conf))
+        with md.MD(struct = self.universe, top = self.top, multi = self.config[MULTI]) as mdr:
+            print("md.MD returned with {}".format(mdr))
         
         #{'top': '/home/andy/tmp/1OMB/top/system.top', 'mainselection': '"Protein"', 'struct': '/home/andy/tmp/1OMB/em/em.pdb'}
         
-        self.top = mdr["top"]
-        self.struct = mdr["struct"]
-        self.mainselection = mdr["mainselection"]
+
         
         # add the multi here, its an arg for mdrun, NOT grompp...
         # this is how many ensembles we do.
-        mdr["multi"] = self.pos.shape[0]
+        #mdr["multi"] = self.pos.shape[0]
         
         # run the md
-        mdr = md.run_MD(System.md_dir, **mdr)
+        #mdr = md.run_MD(System.md_dir, **mdr)
         
-        self._processes_trajectories(mdr.trajectories)
+        #self._processes_trajectories(mdr.trajectories)
 
         logging.debug("finished System.md()")
         
@@ -458,36 +501,13 @@ class System(object):
 
         logging.info("starting System.equilibriate()")
         
-        conf = {"struct":System.system_struct, "top":self.top, 
-                "dirname":System.equilibriate_dir, "deffnm":"equilibriate"}
-        conf.update(self.config.get("equilibriate", {}))
+        with md.MD_restrained(struct=self.universe, top=self.top, nsteps=self.config[EQ_STEPS]) as eq:
         
-        self._write_system_struct()
+            self.universe.load_new(eq["struct"])
+            
+            self.current_timestep.atomic_equilibriated_positions = self.universe.atoms.positions
         
-        logging.debug("calling md.MD_restrained with {}".format(conf))
-        # set up a restrained md run
-        mdr = md.MD_restrained(**conf)
-        logging.debug("md.MD_restrained returned with {}".format(mdr))
-        
-        #{'top': '/home/andy/tmp/1OMB/top/system.top', 'mainselection': '"Protein"', 'struct': '/home/andy/tmp/1OMB/em/em.pdb'}
-        
-        self.top = mdr["top"]
-        self.struct = mdr["struct"]
-        self.mainselection = mdr["mainselection"]
-        print(mdr)
-        
-        #def _run_md(self, dirname, **kwargs):
-        #runner_factory = self.config.get("md_runner", md.MDrunnerLocal)
-        #runner = runner_factory(dirname, **kwargs)
-        #runner.run_check()
-        
-        md.run_MD(System.equilibriate_dir, **mdr)
-        
-        self.universe.load_new(self.struct)
-        
-        self.hdf_write("ATOMIC_EQUILIBRIATED_POSITIONS", self.universe.atoms.positions)
-        
-        [s.equilibriated() for s in self.subsystems]
+            [s.equilibriated() for s in self.subsystems]
         
         logging.info("finished System.equilibriate()")
         
@@ -608,12 +628,12 @@ class System(object):
         """
         with md.minimize(struct=self.universe, top=self.top, nsteps=self.config[MN_STEPS]) as mn:
 
-            
             print(mn)
         
             self.universe.load_new(mn["struct"])
+            
+            self.current_timestep.atomic_minimized_positions = self.universe.atoms.positions
         
-            #self.hdf_write("ATOMIC_MINIMIZED_POSITIONS", self.universe.atoms.positions)
             [s.minimized() for s in self.subsystems]
             
         

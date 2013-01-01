@@ -348,7 +348,42 @@ def MD_restrained(dirname='MD_POSRES', **kwargs):
     #kwargs.setdefault('nstxtcout', '5000')  # xtc pos
     kwargs.setdefault('mdp',config.templates['md_CHARMM27.mdp'])
     
-    return MDManager(gromacs.setup._setup_MD(dirname, **kwargs))
+    #gromacs.setup._setup_MD(dirname, **kwargs))
+    #with MDManager(
+
+
+
+        #logging.info("starting System.equilibriate()")
+        
+        #conf = {"struct":System.system_struct, "top":self.top, 
+        #        "dirname":System.equilibriate_dir, "deffnm":"equilibriate"}
+        #conf.update(self.config.get("equilibriate", {}))
+        
+        #self._write_system_struct()
+        
+        #logging.debug("calling md.MD_restrained with {}".format(conf))
+        # set up a restrained md run
+        #mdr = md.MD_restrained(**conf)
+        #logging.debug("md.MD_restrained returned with {}".format(mdr))
+        
+        #{'top': '/home/andy/tmp/1OMB/top/system.top', 'mainselection': '"Protein"', 'struct': '/home/andy/tmp/1OMB/em/em.pdb'}
+        
+        #self.top = mdr["top"]
+        #self.struct = mdr["struct"]
+        #self.mainselection = mdr["mainselection"]
+        #print(mdr)
+        
+        #with md.MD_restrained(struct=self.universe, top=self.top, nsteps=self.config[EQ_STEPS]) as eq:
+        
+        #md.run_MD(System.equilibriate_dir, **mdr)
+        
+        #self.universe.load_new(self.struct)
+        
+        #self.hdf_write("", self.universe.atoms.positions)
+        
+        #[s.equilibriated() for s in self.subsystems]
+        
+
     
 
 md_defaults = {
