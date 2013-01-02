@@ -24,6 +24,7 @@ from os import path
 from util import data_tofile
 import shutil
 import tempfile
+import glob
 
 from collections import Mapping, Hashable 
 
@@ -67,9 +68,23 @@ class MDManager(Mapping, Hashable):
         print("__enter__")
         return self
     
-    def __exit__(self, *args):
-        print("deleting {}".format(self.dirname))
-        #shutil.rmtree(self.dirname)
+    def __exit__(self, exc_type, exc_value, traceback):
+        """
+        if the block terminated without raising an exception, all three arguments will be None; otherwise see below.
+
+        exc_type: The type of the exception.
+
+        exc_value: The exception instance raised.
+
+        traceback: A traceback instance.
+        """
+        if exc_type is not None and exc_value is not None and traceback is not None:
+            print("deleting {}".format(self.dirname))
+            #shutil.rmtree(self.dirname)
+        else:
+            logging.error("MDManager in directory {} __exit__ called with exception {}".format(self.dirname, exc_value))
+            logging.error("MDManager will NOT delete directory {}".format(self.dirname))
+       
 
         
         
@@ -97,109 +112,9 @@ class MDrunnerLocal(gromacs.run.MDrunner):
         """
 
         return ["mpiexec", "-n", "4"]
-
-
+ 
     
-def test_md(config, atoms):
-#    return ResourceManager("dpc_125_nvt.trr")
 
-    files = ["nvt60.trr", "nvt61.trr", "nvt62.trr", "nvt63.trr", "nvt64.trr", 
-             "nvt65.trr", "nvt66.trr", "nvt67.trr", "nvt68.trr", "nvt69.trr"]
-    
-    return ResourceManager(files)
-    
-    
-def MD(dirname='MD', **kwargs):
-    """Set up, but don't actually run an equilibrium MD.
-
-    Additional itp files should be in the same directory as the top file.
-
-    Many of the keyword arguments below already have sensible values. Note that
-    setting *mainselection* = ``None`` will disable many of the automated
-    choices and is often recommended when using your own mdp file.
-
-    :Keywords:
-       *dirname*
-          set up under directory dirname [MD]
-       *struct*
-          input structure (gro, pdb, ...) [MD_POSRES/md_posres.pdb]
-       *top*
-          topology file [top/system.top]
-       *mdp*
-          mdp file (or use the template) [templates/md.mdp]
-       *ndx*
-          index file (supply when using a custom mdp)
-       *includes*
-          additional directories to search for itp files
-       *mainselection*
-          ``make_ndx`` selection to select main group ["Protein"]
-          (If ``None`` then no canonical index file is generated and
-          it is the user's responsibility to set *tc_grps*,
-          *tau_t*, and *ref_t* as keyword arguments, or provide the mdp template
-          with all parameter pre-set in *mdp* and probably also your own *ndx*
-          index file.)
-       *deffnm*
-          default filename for Gromacs run [md]
-       *runtime*
-          total length of the simulation in ps [1000]
-       *dt*
-          integration time step in ps [0.002]
-       *qscript*
-          script to submit to the queuing system; by default
-          uses the template :data:`gromacs.config.qscript_template`, which can
-          be manually set to another template from :data:`gromacs.config.templates`;
-          can also be a list of template names.
-       *qname*
-          name to be used for the job in the queuing system [MD_GMX]
-       *mdrun_opts*
-          option flags for the :program:`mdrun` command in the queuing system
-          scripts such as "-stepout 100 -dgdl". [""]
-       *kwargs*
-          remaining key/value pairs that should be changed in the template mdp
-          file, e.g. ``nstxtcout=250, nstfout=250`` or command line options for
-          :program`grompp` such as ``maxwarn=1``.
-
-    :Returns: a dict that can be fed into :func:`gromacs.setup.MD`
-              (but check, just in case, especially if you want to
-              change the *define* parameter in the mdp file)    
-    """
-
-    logging.info("[%(dirname)s] Setting up MD..." % vars())
-    
-    # set the interval to save output values.
-    # nstout is NOT a valid mdp name, however we need all the values (force, vel, pos) to
-    # be written at at the same time interval, so I came up with this key to set the
-    # output interval for all of them.
-    nstout = MD.defaults["nstout"]
-    if kwargs.has_key("nstout"):
-        nstout = kwargs.pop("nstout")
-    kwargs.setdefault('nstxout', nstout)   # trr pos
-    kwargs.setdefault('nstvout', nstout)   # trr veloc
-    kwargs.setdefault('nstfout', nstout)   # trr forces
-    
-    kwargs.setdefault('mdp',config.templates['md_CHARMM27.mdp'])
-    
-    return gromacs.setup._setup_MD(dirname, **kwargs)
-
-
-MD.defaults = {
-               "nstout":10,          # output things every so many steps.
-               'mdp':config.templates['md_CHARMM27.mdp']
-               }
-
-def MD_config_get(conf, what):
-    """
-    get a value from the config, if it does not have it, use the
-    appropriate defaults. 
-    
-    This is the same value that MD will use.
-    """
-    result = None
-    if conf.has_key(what):
-        result = conf[what]
-    else:
-        result = MD.defaults[what]
-    return result
 
     
 def minimize(struct, top, dirname='em', minimize_mdp=config.templates['em.mdp'], 
@@ -267,7 +182,7 @@ def minimize(struct, top, dirname='em', minimize_mdp=config.templates['em.mdp'],
     result["dirname"] = dirname
     return MDManager(result)
     
-def MD_restrained(struct, top, posres, dirname=None, **kwargs):
+def setup_md(struct, top, posres, dirname=None, **kwargs):
     """Set up MD with position restraints.
 
     Additional itp files should be in the same directory as the top file.
@@ -350,7 +265,7 @@ def MD_restrained(struct, top, posres, dirname=None, **kwargs):
     posres = data_tofile(posres, "posres.itp", dirname=dirname)
     
     kwargs.setdefault('qname', None)
-    kwargs.setdefault('define', '-DPOSRES')
+
     
     # reduce size of output files
     #kwargs.setdefault('nstxout', '50000')   # trr pos
@@ -360,37 +275,15 @@ def MD_restrained(struct, top, posres, dirname=None, **kwargs):
     #kwargs.setdefault('nstenergy', '2500')  # edr energy
     #kwargs.setdefault('nstxtcout', '5000')  # xtc pos
     kwargs.setdefault('mdp',config.templates['md_CHARMM27.mdp'])
+
+    logging.debug("calling _setup_MD with kwargs: {}".format(kwargs))
     
     setup_MD = gromacs.setup._setup_MD(dirname, struct = struct, top = top, **kwargs)
     
     setup_MD["dirname"] = dirname
     
-    print setup_MD
-    #with MDManager(
-
-
-
-        #logging.info("starting System.equilibriate()")
-        
-        #conf = {"struct":System.system_struct, "top":self.top, 
-        #        "dirname":System.equilibriate_dir, "deffnm":"equilibriate"}
-        #conf.update(self.config.get("equilibriate", {}))
-        
-        #self._write_system_struct()
-        
-        #logging.debug("calling md.MD_restrained with {}".format(conf))
-        # set up a restrained md run
-        #mdr = md.MD_restrained(**conf)
-        #logging.debug("md.MD_restrained returned with {}".format(mdr))
-        
-        #{'top': '/home/andy/tmp/1OMB/top/system.top', 'mainselection': '"Protein"', 'struct': '/home/andy/tmp/1OMB/em/em.pdb'}
-        
-        #self.top = mdr["top"]
-        #self.struct = mdr["struct"]
-        #self.mainselection = mdr["mainselection"]
-        #print(mdr)
-        
-        #with md.MD_restrained(struct=self.universe, top=self.top, nsteps=self.config[EQ_STEPS]) as eq:
+    logging.debug("finished _setup_MD, recieved: {}".format(setup_MD))
+   
         
         #md.run_MD(System.equilibriate_dir, **mdr)
         
@@ -402,55 +295,6 @@ def MD_restrained(struct, top, posres, dirname=None, **kwargs):
         
     return MDManager(setup_MD)
         
-
-    
-
-md_defaults = {
-    #title       : Protein-ligand complex NVT equilibration 
-    "define"      : "-DPOSRES",     # position restrain the protein and ligand
-    #; Run parameters
-    "integrator"  : "md",           # leap-frog integrator
-    "nsteps"      : 50000,          # 2 * 50000 = 100 ps
-    "dt"          : 0.002,          # 2 fs
-    #; Output control
-    "nstxout"     : 100,            # save coordinates every 0.2 ps
-    "nstvout"     : 100,            # save velocities every 0.2 ps
-    "nstenergy"   : 100,            # save energies every 0.2 ps
-    "nstlog"      : 100,            # update log file every 0.2 ps
-    #"energygrps"  : "Protein JZ4",  #
-    #; Bond parameters
-    "constraint_algorithm" : "lincs",   # holonomic constraints 
-    "constraints"     : "all-bonds",    # all bonds (even heavy atom-H bonds) constrained
-    "lincs_iter"      : 1,          # accuracy of LINCS
-    "lincs_order"     : 4,          # also related to accuracy
-    #; Neighborsearching
-    "ns_type"     : "grid",         # search neighboring grid cells
-    "nstlist"     : 5,              # 10 fs
-    "rlist"       : 0.9,            # short-range neighborlist cutoff (in nm)
-    "rcoulomb"    : 0.9,            # short-range electrostatic cutoff (in nm)
-    "rvdw"        : 1.4,            # short-range van der Waals cutoff (in nm)
-    #; Electrostatics
-    "coulombtype"     : "PME",      # Particle Mesh Ewald for long-range electrostatics
-    "pme_order"       : 4,          # cubic interpolation
-    "fourierspacing"  : 0.16,       # grid spacing for FFT
-    #; Temperature coupling
-    "tcoupl"      : "Berendsen",    # Berendsen thermostat
-    "tc-grps"     : "Protein SOL",  # two coupling groups - more accurate
-    "tau_t"       : [0.1, 0.1],    # time constant, in ps
-    "ref_t"       : [300, 300],    # reference temperature, one for each group, in K
-    #; Pressure coupling
-    "pcoupl"      : "no",           # no pressure coupling in NVT
-    #; Periodic boundary conditions
-    "pbc"         : "xyz",          # 3-D PBC
-    #; Dispersion correction
-    "DispCorr"    : "EnerPres",     # account for cut-off vdW scheme
-    #; Velocity generation
-    "gen_vel"     : "yes",          # assign velocities from Maxwell distribution
-    "gen_temp"    : 300,            # temperature for Maxwell distribution
-    "gen_seed"    : -1,             # generate a random seed
-    }
-
-
 
 def topology(struct, protein="protein", top=None, dirname="top", posres=None, ff="charmm27", water="spc", ignh=True, **top_args):
     """
@@ -565,7 +409,7 @@ def solvate(struct, top, box,
     return MDManager(result)
     
     
-def run_MD(dirname, md_runner=gromacs.run.MDrunner, **kwargs):
+def run_md(dirname, md_runner=gromacs.run.MDrunner, **kwargs):
     """
     actually perform the md run.
     
@@ -584,47 +428,54 @@ def run_MD(dirname, md_runner=gromacs.run.MDrunner, **kwargs):
         in result.trajectories.
                     
     """
-    Result = namedtuple('Result', 'trajectories')
+    Result = namedtuple("Result", ["struct", "trajectories"])
     
     # pick out the relevant mdrun keywords from kwargs
-    mdrun_args = ["h","version","nice","deffnm","xvg","pd","dd","nt","npme","ddorder",
+    mdrun_args = ["s","o","x","cpi","cpo","c","e","g","dhdl","field","table","tablep",
+                  "tableb","rerun","tpi","tpid","ei","eo","j","jo","ffout","devout",
+                  "runav","px","pf","mtx","dn","multidir","h","version","nice","deffnm",
+                  "xvg","pd","dd","nt","npme","ddorder",
                   "ddcheck","rdd","rcon","dlb","dds","gcom","v","compact","seppot",
                   "pforce","reprod","cpt","cpnum","append","maxh","multi","replex",
                   "reseed","ionize"]
-    keys = [i for i in kwargs.keys() if i in mdrun_args]
-    kwargs = dict((i, kwargs[i]) for i in keys)
+    kwargs = dict([(i, kwargs[i]) for i in kwargs.keys() if i in mdrun_args])
+
     ncores = 4
     
-    multi = kwargs.pop("multi", 1)
-    if multi > 1:
-        kwargs["multi"] = multi
-        files = map(lambda i: 
-                    path.abspath(path.join(dirname, kwargs["deffnm"] + str(i) + ".trr")), 
-                    range(multi))
-        ncores = multi
+    # figure out what the output file is, try set default output format to pdb
+    struct = None
+    if kwargs.has_key("deffnm"):
+        if kwargs.has_key("c"):
+            struct = kwargs["c"]
+        else:
+            struct = kwargs["deffnm"] + ".pdb"
+            kwargs["c"] = struct
+    elif kwargs.has_key["c"]:
+        struct = kwargs["c"]
     else:
-        files = []
+        # default name according to mdrun man
+        struct = "confout.gro"
         
+    
+   
+    # create an MDRunner which changes to the specifiec dirname, and 
+    # calls mdrun in that dir, then returns to the current dir.     
     runner = md_runner(dirname, **kwargs)
     runner.mpiexec = "mpiexec"
     runner.run_check(ncores = ncores)
-    
-    return Result(files)
 
-def multi_files(dirname, deffnm, multi):
-    """
-    creates a list of filenames for a multi md simulation. 
+    trajectories = [os.path.abspath(trr) for trr in glob.glob(dirname + "/*.trr")]
+
+    print("struct", struct)
+    print("pwd", os.path.curdir)
+    print("dirname", dirname)
     
-    @param dirname: directory where the simulation was performed
-    @param deffnm: default name of files
-    @param multi: how many multi simulations were performed.
-    """ 
+    struct = os.path.realpath(os.path.join(dirname, struct))
+    if not os.path.isfile(struct):
+        logging.warn("guessed output file name {} not found, is a problem????".format(struct))
+        struct = None
     
-    files = map(lambda i: 
-                    path.abspath(path.join(dirname, deffnm + str(i) + ".trr")), 
-                    range(multi))
-    return files
-        
+    return Result(struct, trajectories)        
         
     
 def epic_fail():

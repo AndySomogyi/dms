@@ -18,6 +18,9 @@ print(__name__)
 
 if len(sys.argv) == 3:
     system.ctest(sys.argv[1], sys.argv[2])
+elif len(sys.argv) == 2:
+    s = system.System('test.hdf')
+    s.equilibriate()
 else:
     #import subsystems
     #s=system.System("test.hdf")

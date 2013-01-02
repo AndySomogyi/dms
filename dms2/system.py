@@ -85,6 +85,7 @@ import tempfile
 import MDAnalysis
 
 import h5py #@UnresolvedImport
+import config
 import md
 import subsystems
 import util
@@ -109,9 +110,19 @@ BETA_T = "beta_t"
 MN_STEPS = "mn_steps"
 EQ_STEPS = "eq_steps"
 MD_STEPS = "md_steps"
+
+# All values are stored in the hdf file, however there is no direct
+# way to store a python dict in hdf, so we need to store it as
+# a set of key / value lists.
+# This is a bit hackish, but to store them as lists, the following
+# 'key names' will have '_keys' and '_values' automatically appended
+# to them, then the corresponding keys / values will be stored as 
+# such. 
 MN_ARGS = "mn_args"
 EQ_ARGS = "eq_args"
 MD_ARGS = "md_args"
+KEYS="_keys"
+VALUES="_values"
 MULTI= "multi"
 SOLVATE="solvate"
 POSRES_ITP="posres.itp"
@@ -321,10 +332,7 @@ class System(object):
         returns a Universe object from a structure file stored as a 
         blob in the hdf file.
         """
-        #fname = tempfile.gettempdir() + "/" + tempfile.gettempprefix() + ".pdb"
-        #
-        #
-        import shutil
+
         data = None
         
         if key is None:
@@ -339,50 +347,16 @@ class System(object):
             data = array(self.hdf[key])
         
         with tempfile.NamedTemporaryFile(suffix=".pdb") as f:  
-            print("data.tofile(\"_universe_from_hdf.pdb\") ")
-            data.tofile("_universe_from_hdf.pdb") 
-            
+            # EXTREMLY IMPORTANT to flush the file, 
+            # NamedTemporaryFile returns an OPEN file, and the array writes to this file, 
+            # so we need to flush it, as this file handle remains open. Then the MDAnalysis
+            # universe opens another handle and reads its contents from it. 
             data.tofile(f.file)
             f.file.flush()
             u = MDAnalysis.Universe(f.name)
-            shutil.copyfile(f.name, "_universe_from_hdf.temp.pdb")
-            w=MDAnalysis.Writer("_universe_from_hdf.unv.pdb")
-            w.write(u)
-            w.close()
             return u
             
             
-            
-    def _topology(self, config):
-        """ 
-        set up the topology.
-        if top is specified in config, it is used, otherwise a new one is created.
-        
-        @postcondition: self.top, self.struct, self.posres 
-        
-        """
-        # get the struct and top from config, generate if necessary
-        if config.has_key("struct") and config.has_key("top"):
-            logging.info("config contains a top, using {}".format(config["top"]))
-            self.struct = config["struct"]
-            self.top = config["top"]
-            self.posres = config.get("posres", None)
-        else:
-            # keys (and default values) from main part of config
-            logging.info("config does not contain a \"top\", autogenerating...")
-            defs = [("struct", None), ("protein","protein"), ("top", None)]
-            top_args = dict([(s[0], config.get(*s)) for s in defs])
-            top_args.update(config.get("top_args", {}))
-            
-            top =  md.topology(**top_args)
-            self.struct = top["struct"] 
-            self.top = top["top"]
-            self.posres = top["posres"]
-            del top
-            
-        self.key_fromfile("struct", top["struct"])
-        self.key_fromfile("top", top["top"])
-        self.key_fromfile("posres", top["posres"])
 
         
         
@@ -459,80 +433,49 @@ class System(object):
         w.close()
         
 
-    def md(self):
+
+        
+
+    def setup_equilibriate(self):
         """
-        take the current structure perform a set of md run(s)
-        
+        setup an equilibriation md run using the contents of the universe, but do not actually run it.
 
-        @precondition: 
-        self.universe contains current atomic state
-        self.top is valid
-        
-        
-        @postcondition: 
-        all subsystems are notified.
+        @return an MDManager object loaded with the trr to run an equilibriation.
         """
-        
-        logging.debug("starting System.md()")
 
-        #conf = {
-        #conf.update(self.config.get("md", {}))
+        logging.info("setting up equilibriation...")
         
-     
-        
-        #logging.debug("calling md.MD with {}".format(conf))
-        with md.MD(struct = self.universe, top = self.top, multi = self.config[MULTI]) as mdr:
-            print("md.MD returned with {}".format(mdr))
-        
-        #{'top': '/home/andy/tmp/1OMB/top/system.top', 'mainselection': '"Protein"', 'struct': '/home/andy/tmp/1OMB/em/em.pdb'}
-        
+        return md.setup_md(struct=self.universe, \
+                               top=self.top, \
+                               posres = self.posres, \
+                               nsteps=self.config[EQ_STEPS], \
+                               dirname="eq_test", \
+                               **dict(zip(self.config[EQ_ARGS + KEYS], self.config[EQ_ARGS + VALUES])))
+    
+    def setup_md(self):
+        """
+        setup an equilibriation md run using the contents of the universe, but do not actually run it.
 
-        
-        # add the multi here, its an arg for mdrun, NOT grompp...
-        # this is how many ensembles we do.
-        #mdr["multi"] = self.pos.shape[0]
-        
-        # run the md
-        #mdr = md.run_MD(System.md_dir, **mdr)
-        
-        #self._processes_trajectories(mdr.trajectories)
+        @return an MDManager object loaded with the trr to run an equilibriation.
+        """
 
-        logging.debug("finished System.md()")
+        logging.info("setting up equilibriation...")
         
-
+        return md.setup_md(struct=self.universe, \
+                               top=self.top, \
+                               posres = self.posres, \
+                               nsteps=self.config[MD_STEPS], \
+                               dirname="md_test", \
+                               **dict(zip(self.config[MD_ARGS + KEYS], self.config[MD_ARGS + VALUES])))
+        
     def equilibriate(self):
-        """
-        take the current structure and equilibriate it via md.
-        
-        Loads the self.universe with the minimized structure and notifies all the 
-        subsystems.
-        
-        @precondition: 
-        self.universe contains atomic state
-        
-        @postcondition: 
-        self.struct now refers to minimized structure generated by md
-        self.universe loaded with minimized structure
-        all subsystems are notified.
-        """
+        with self.setup_equilibriate() as eq:
+            mdres = md.run_md(eq.dirname, **eq)
+            self.universe.load_new(mdres.struct)
+        [s.equilibriated() for s in self.subsystems]
+    
 
-        logging.info("starting System.equilibriate()")
-        
-        with md.MD_restrained(struct=self.universe, \
-                              top=self.top, \
-                              posres = self.posres, \
-                              nsteps=self.config[EQ_STEPS]) as eq:
-            
-            print("finished MD_restrained")
-        
-            #self.universe.load_new(eq["struct"])
-            
-            #self.current_timestep.atomic_equilibriated_positions = self.universe.atoms.positions
-        
-            #[s.equilibriated() for s in self.subsystems]
-        
-        logging.info("finished System.equilibriate()")
-        
+    
     def _processes_trajectories(self, trajectories):
         """
         reads each given atomic trajectory, extracts the
@@ -842,11 +785,11 @@ Au2 = {
     'temperature' : 300.0, 
     'struct': '/home/andy/tmp/1OMB/1OMB.pdb',
     "subsystem_select": "not resname SOL",
-    "cg_steps":150,
+    "cg_steps":10,
     "beta_t":10.0,
     "top_args": {},
-    "minimize_steps":1000,
-    "md_steps":250000,
+    "minimize_steps":100,
+    "md_steps":50,
     "multi":1,
     "equilibriate_steps":1000,
     "solvate":False,
@@ -854,7 +797,17 @@ Au2 = {
     
 def ctest(pdb, hdf):
     Au2['struct'] = pdb
-    create_config(fid=hdf, **Au2)    
+    create_config(fid=hdf, **Au2)
+
+DEFAULT_MD_ARGS = { "mdp":config.templates["md_CHARMM27.mdp"],  # the default mdp template \
+                    "nstxout": 10,    # trr pos
+                    "nstvout": 10,    # trr veloc
+                    "nstfout": 10,    # trr forces
+                    }
+
+DEFAULT_EQ_ARGS = { "mdp":config.templates["md_CHARMM27.mdp"],  # the default mdp template 
+                    "define":"-DPOSRES" # do position restrained md for equilibriation
+                    }
 
 def create_config(fid,
                   struct,
@@ -866,10 +819,13 @@ def create_config(fid,
                   subsystem_args = [],
                   cg_steps = 50,
                   beta_t  = 10.0,
-                  mn_steps = 1000,
-                  md_steps = 1000,
+                  mn_steps = 500,
+                  md_steps = 100,
                   multi = 1,
-                  eq_steps = 1000,
+                  eq_steps = 100,
+                  mn_args = {},
+                  eq_args = DEFAULT_EQ_ARGS,
+                  md_args = DEFAULT_MD_ARGS,
                   solvate = False,
                   posres=None,
                   ndx=None,
@@ -889,12 +845,23 @@ def create_config(fid,
                 pass
             src_files[str(keyname)] = fromfile(filename, dtype=uint8)
 
-        def int_attr(keyname, value):
-            try:
-                conf[keyname] = int(value)
-            except Exception, e:
-                print("error, {} {} must be a numeric value".format(keyname, value))
-                raise e
+
+        # create an attr key /  value in the config attrs
+        def attr(keyname, typ, value):
+            if value is not None:
+                try:
+                    if typ is dict:
+                        conf[keyname + KEYS] = value.keys()
+                        conf[keyname + VALUES] = value.values()
+                    else:
+                        conf[keyname] = typ(value)
+                    print("config[{}] = {}".format(keyname, value))
+                except Exception, e:
+                    print("error, could not convert \"{}\" with value of \"{}\" to an {} type".
+                          format(keyname, value, typ))
+                    raise e
+                
+                
         try:
             box = array(box) 
             print("periodic boundary conditions: {}".format(box))
@@ -929,13 +896,17 @@ def create_config(fid,
             print("error, temperature {} must be a numeric value".format(temperature))
             raise e
 
-        int_attr(CG_STEPS, cg_steps)
-        int_attr(BETA_T, beta_t)
-        int_attr(MN_STEPS, mn_steps)
-        int_attr(MD_STEPS, md_steps)
-        int_attr(MULTI, multi)
-        int_attr(EQ_STEPS, eq_steps)
-        int_attr(SOLVATE, solvate)
+        attr(CG_STEPS, int, cg_steps)
+        attr(BETA_T, int, beta_t)
+        attr(MN_STEPS, int, mn_steps)
+        attr(MD_STEPS, int, md_steps)
+        attr(MULTI, int, multi)
+        attr(EQ_STEPS, int, eq_steps)
+        attr(SOLVATE, int, solvate)
+
+        attr(MN_ARGS, dict, mn_args)
+        attr(EQ_ARGS, dict, eq_args)
+        attr(MD_ARGS, dict, md_args)
 
         # check struct
         try:
