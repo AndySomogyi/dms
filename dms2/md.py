@@ -23,6 +23,7 @@ from collections import namedtuple
 from os import path
 from util import data_tofile
 import shutil
+import tempfile
 
 from collections import Mapping, Hashable 
 
@@ -266,7 +267,7 @@ def minimize(struct, top, dirname='em', minimize_mdp=config.templates['em.mdp'],
     result["dirname"] = dirname
     return MDManager(result)
     
-def MD_restrained(dirname='MD_POSRES', **kwargs):
+def MD_restrained(struct, top, posres, dirname=None, **kwargs):
     """Set up MD with position restraints.
 
     Additional itp files should be in the same directory as the top file.
@@ -336,6 +337,18 @@ def MD_restrained(dirname='MD_POSRES', **kwargs):
               variables if you require more output.
     """
     logging.info("[%(dirname)s] Setting up MD with position restraints..." % vars())
+    
+    
+    
+    if dirname is None:
+        shutil.rmtree("foo", ignore_errors = True)
+        os.mkdir("foo")
+        dirname = path.abspath("foo")#tempfile.mkdtemp(dir="."))
+        
+    struct = data_tofile(struct, "src.pdb", dirname=dirname)
+    top = data_tofile(top, "src.top", dirname=dirname)
+    posres = data_tofile(posres, "posres.itp", dirname=dirname)
+    
     kwargs.setdefault('qname', None)
     kwargs.setdefault('define', '-DPOSRES')
     
@@ -348,7 +361,11 @@ def MD_restrained(dirname='MD_POSRES', **kwargs):
     #kwargs.setdefault('nstxtcout', '5000')  # xtc pos
     kwargs.setdefault('mdp',config.templates['md_CHARMM27.mdp'])
     
-    #gromacs.setup._setup_MD(dirname, **kwargs))
+    setup_MD = gromacs.setup._setup_MD(dirname, struct = struct, top = top, **kwargs)
+    
+    setup_MD["dirname"] = dirname
+    
+    print setup_MD
     #with MDManager(
 
 
@@ -382,6 +399,8 @@ def MD_restrained(dirname='MD_POSRES', **kwargs):
         #self.hdf_write("", self.universe.atoms.positions)
         
         #[s.equilibriated() for s in self.subsystems]
+        
+    return MDManager(setup_MD)
         
 
     
@@ -446,7 +465,6 @@ def topology(struct, protein="protein", top=None, dirname="top", posres=None, ff
         pdb2gmx_args.update(top_args)
         struct = data_tofile(struct, "src.pdb", dirname=dirname)
         result = gromacs.setup.topology(struct, protein, "system.top", dirname, **pdb2gmx_args)
-        result["posres"] = path.abspath(path.join(dirname, protein + "_posres.itp"))
         result["dirname"] = dirname
     else:
         logging.info("config specified a topology, \{\"top\":{}, \"struct\":{}\}".format(top, struct))

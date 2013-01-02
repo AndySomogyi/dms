@@ -250,11 +250,28 @@ class System(object):
         
     @property
     def struct(self):
-        return self.hdf[CURRENT_TIMESTEP + "/" + STRUCT_PDB]
+        return self._get_file_data(STRUCT_PDB)
     
     @property
     def top(self):
-        return self.hdf[CURRENT_TIMESTEP + "/" + TOPOL_TOP]
+        return self._get_file_data(TOPOL_TOP)
+    
+    @property
+    def posres(self):
+        return self._get_file_data(POSRES_ITP)
+    
+    def _get_file_data(self, file_key):
+        """
+        finds a file stored as an hdf key. This first looks if there is a 'current_timestep', 
+        if so uses it, otherwise, looks in 'src_files'. 
+        """
+        #TODO imporove error checking and handling.
+        if self.hdf.id.links.exists(CURRENT_TIMESTEP):
+            file_key = CURRENT_TIMESTEP + "/" + file_key
+        else:
+            file_key = SRC_FILES + "/" + file_key
+        return self.hdf[file_key]
+        
     
     def begin_timestep(self):
         """
@@ -501,13 +518,18 @@ class System(object):
 
         logging.info("starting System.equilibriate()")
         
-        with md.MD_restrained(struct=self.universe, top=self.top, nsteps=self.config[EQ_STEPS]) as eq:
-        
-            self.universe.load_new(eq["struct"])
+        with md.MD_restrained(struct=self.universe, \
+                              top=self.top, \
+                              posres = self.posres, \
+                              nsteps=self.config[EQ_STEPS]) as eq:
             
-            self.current_timestep.atomic_equilibriated_positions = self.universe.atoms.positions
+            print("finished MD_restrained")
         
-            [s.equilibriated() for s in self.subsystems]
+            #self.universe.load_new(eq["struct"])
+            
+            #self.current_timestep.atomic_equilibriated_positions = self.universe.atoms.positions
+        
+            #[s.equilibriated() for s in self.subsystems]
         
         logging.info("finished System.equilibriate()")
         
@@ -1034,8 +1056,10 @@ def hdf2pdb(pdb,hdf,frame,pdb2):
     w.close()
     f.close()
     
-def test():
-    print __name__
+def test_md():
+    sys = System("test.hdf")
+    
+    sys.equilibriate()
     
 
 if __name__ == "__main__":
