@@ -20,7 +20,9 @@ if len(sys.argv) == 3:
     system.ctest(sys.argv[1], sys.argv[2])
 elif len(sys.argv) == 2:
     s = system.System('test.hdf')
-    s.equilibriate()
+    s.begin_timestep()
+    s.md()
+    s.end_timestep()
 else:
     #import subsystems
     #s=system.System("test.hdf")

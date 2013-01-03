@@ -129,6 +129,10 @@ POSRES_ITP="posres.itp"
 SUBSYSTEM_FACTORY = "subsystem_factory"
 SUBSYSTEM_SELECTS = "subsystem_selects"
 SUBSYSTEM_ARGS = "subsystem_args"
+NSTXOUT = "nstxout"
+NSTVOUT = "nstvout"
+NSTFOUT = "nstfout"
+BOX = "box"
 
 class Timestep(object):
     """
@@ -184,19 +188,12 @@ class System(object):
     state. 
     """    
     
-
-        
-
-            
-        
-    
-   
-
     def __init__(self, fid):      
         
         self.hdf = h5py.File(fid)
         self.config = self.hdf[CONFIG].attrs
         self.universe = self._universe_from_hdf()
+        self._box = self.config[BOX]
         
         # load the subsystems
         # this list will remain constant as long as the topology remains constant.
@@ -205,44 +202,14 @@ class System(object):
         self.ncgs, self.subsystems = factory(self, self.config[SUBSYSTEM_SELECTS], *self.config[SUBSYSTEM_ARGS])
         logging.debug("using {} subsystems and {} coarse grained vars".format(self.subsystems, self.ncgs))
         
+        # notify subsystems, we have a new universe
+        [s.universe_changed(self.universe) for s in self.subsystems]
         
+        md_nensemble = self.config[MULTI]
         
-        """
-        
-        #a list of subsystems
-        self.subsystems = None
-        self.config = config
-        self.pbc = array(config["pbc"])
-        self.timestep = 0
-        
-        # default values
-        self.ndx = "main.ndx"
-        self.mainselection = "Protein"
-        
-        if self.config.has_key("hdf") and nframe is None:
-            self.hdf = h5py.File(self.config["hdf"], "w")
-        else:
-            self.hdf = None
-
-        # set (or create) the topology
-        self._topology(config)
-            
-        
-            
-            
-        # solvate the system (if the config says so)
-        # and load the initial structure
-        if self.config.has_key("solvate") and self.config["solvate"]:
-            # solvate automatically calls universe_changed(...)
-            self.solvate()
-        else:
-            self.universe = MDAnalysis.Universe(self.struct)
-            [s.universe_changed(self.universe) for s in self.subsystems]
-                   
-        md_nensemble = int(config.get("multi", 1))
-        
+        mdd = dict(zip(self.config[MD_ARGS + KEYS], self.config[MD_ARGS + VALUES]))
         # number of data points in trajectory, md steps / output interval
-        md_nsteps = int(config["md"]["nsteps"])/int(md.MD_config_get(config["md"], "nstout"))
+        md_nsteps = int(self.config[MD_STEPS])/int(mdd[NSTXOUT])
         
         nrs = len(self.subsystems)
         
@@ -254,10 +221,6 @@ class System(object):
         logging.info("pos {}".format(self.pos.shape))
         logging.info("frc {}".format(self.forces.shape))
         logging.info("vel {}".format(self.velocities.shape))
-
-        if nframe is not None:
-            self.read_frame(config["hdf"], nframe)
-        """
         
     @property
     def struct(self):
@@ -270,6 +233,10 @@ class System(object):
     @property
     def posres(self):
         return self._get_file_data(POSRES_ITP)
+    
+    @property
+    def box(self):
+        return self._box
     
     def _get_file_data(self, file_key):
         """
@@ -356,35 +323,7 @@ class System(object):
             u = MDAnalysis.Universe(f.name)
             return u
             
-            
 
-        
-        
-    def hdf_write(self, name, value):
-        """
-        write a value to the output file using the given key at the current timestep.
-        """
-        
-        if self.hdf is not None:
-            keys = self.hdf.keys()
-            if(keys.count(str(self.timestep))):
-                grp = self.hdf[str(self.timestep)]
-            else:
-                grp = self.hdf.create_group(str(self.timestep))
-            try:
-                del grp[str(name)]
-                logging.info('cleared existing output file value of \"{}/{}\"'.format(self.timestep, name))
-            except KeyError:
-                pass
-    
-            if isinstance(value, list):
-                subgrp = grp.create_group(str(name))
-                for i in enumerate(value):
-                    subgrp[str(i[0])] = i[1]
-            else:
-                grp[str(name)] = value
-    
-            self.hdf.flush()
         
     def run(self):
         for i in range(int(self.config["cg_steps"])):
@@ -466,16 +405,23 @@ class System(object):
                                posres = self.posres, \
                                nsteps=self.config[MD_STEPS], \
                                dirname="md_test", \
+                               multi=self.config[MULTI], \
                                **dict(zip(self.config[MD_ARGS + KEYS], self.config[MD_ARGS + VALUES])))
         
     def equilibriate(self):
-        with self.setup_equilibriate() as eq:
-            mdres = md.run_md(eq.dirname, **eq)
+        with self.setup_equilibriate() as eqsetup:
+            mdres = md.run_md(eqsetup.dirname, **eqsetup)
             self.universe.load_new(mdres.struct)
+        
+        self.current_timestep.atomic_equilibriated_positions = self.universe.atoms.positions
         [s.equilibriated() for s in self.subsystems]
-    
+        
+    def md(self):
+        with self.setup_md() as mdsetup:
+            mdres = md.run_md(mdsetup.dirname, **mdsetup)            
+            self._processes_trajectories(mdres.trajectories)
+        
 
-    
     def _processes_trajectories(self, trajectories):
         """
         reads each given atomic trajectory, extracts the
@@ -486,46 +432,44 @@ class System(object):
         compatible with the topologies
         
         """
+        
         # zero the state variables (for this frame)
         self.pos[:] = 0.0
         self.forces[:] = 0.0
         self.velocities[:] = 0.0
+        
+        # save the universe to a tmp file to load back once the trajectories 
+        # are processed.
+        with tempfile.NamedTemporaryFile(suffix=".pdb") as tmp:  
+            writer = MDAnalysis.Writer(tmp.name)
+            writer.write(self.universe)
+            writer.close()
+            del writer
+            
+            # universe is saved, process trajectories
+            for fi, f in enumerate(trajectories):
+                print(f)
+                self.universe.load_new(f)
+                for tsi, _ in enumerate(self.universe.trajectory):
+                    if tsi < self.velocities.shape[2]:
+                        for si, s in enumerate(self.subsystems):
+                            pos,vel,frc = s.frame()
+                            self.pos       [fi,si,tsi,:] = pos
+                            self.velocities[fi,si,tsi,:] = vel
+                            self.forces    [fi,si,tsi,:] = frc
+                            
+                            if(tsi % 25 == 0):
+                                print("processing frame {},\t{}%".format(tsi, 100.0*float(tsi)/float(self.velocities.shape[2])))
+            
+            # done with trajectories, load original contents of universe back
+            self.universe.load_new(tmp.name)
+            
+        timestep = self.current_timestep
+        timestep.cg_positions = self.pos
+        timestep.cg_velocities = self.velocities
+        timestep.cg_forces = self.forces
+            
 
-        for fi, f in enumerate(trajectories):
-            print(f)
-            self.universe.load_new(f)
-            for tsi, _ in enumerate(self.universe.trajectory):
-                if tsi < self.velocities.shape[2]:
-                    for si, s in enumerate(self.subsystems):
-                        pos,vel,frc = s.frame()
-                        self.pos       [fi,si,tsi,:] = pos
-                        self.velocities[fi,si,tsi,:] = vel
-                        self.forces    [fi,si,tsi,:] = frc
-                        
-                        if(tsi % 25 == 0):
-                            print("processing frame {},\t{}%".format(tsi, 100.0*float(tsi)/float(self.velocities.shape[2])))
-    
-                        
-                
-            self.universe.trajectory.close()
-            
-        # done with trajectories, reload the starting (equilibriated) structure
-        # need to do this as the md result will delete the trajectory files,
-        # and if these are deleted while the universe has them open, bad things
-        # happen.
-        #self.universe.load_new(System.system_struct)
-        
-        # TODO
-        # delete md output files...
-            
-        # done with files, divide by n frames to get average
-        # self.pos[:,:,:] /= (self.velocities.shape[2])
-        # self.forces[:,:,:] /= (self.velocities.shape[2])  
-        
-        self.hdf_write("POSITIONS", self.pos)  
-        self.hdf_write("FORCES", self.forces)  
-        self.hdf_write("VELOCITIES", self.velocities)
-        
     def topology_changed(self):
         """
         Notify the system that the topology of the universe was changed. 
@@ -597,9 +541,8 @@ class System(object):
         
             self.universe.load_new(mn["struct"])
             
-            self.current_timestep.atomic_minimized_positions = self.universe.atoms.positions
-        
-            [s.minimized() for s in self.subsystems]
+        self.current_timestep.atomic_minimized_positions = self.universe.atoms.positions
+        [s.minimized() for s in self.subsystems]
             
         
     def read_frame(self, hdf, nframe):
@@ -790,7 +733,7 @@ Au2 = {
     "top_args": {},
     "minimize_steps":100,
     "md_steps":50,
-    "multi":1,
+    "multi":4,
     "equilibriate_steps":1000,
     "solvate":False,
     } 
@@ -865,8 +808,7 @@ def create_config(fid,
         try:
             box = array(box) 
             print("periodic boundary conditions: {}".format(box))
-            box /= 10.0 # convert Angstrom to Nm
-            conf["box"] = box
+            conf[BOX] = box
         except Exception, e:
             print("error reading periodic boundary conditions")
             raise e
@@ -937,7 +879,9 @@ def create_config(fid,
                 filedata_fromfile(STRUCT_PDB, top["struct"])
 
                 if solvate:
-                    with md.solvate(box=box, **top) as sol:
+                    # convert Angstrom to Nm, GROMACS works in Nm, and
+                    # we use MDAnalysis which uses Angstroms
+                    with md.solvate(box=box/10.0, **top) as sol:
                         # solvate returns 
                         # {'ndx': '/home/andy/tmp/Au/solvate/main.ndx', 
                         # 'mainselection': '"Protein"', 
