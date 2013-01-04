@@ -388,7 +388,6 @@ class System(object):
                                top=self.top, \
                                posres = self.posres, \
                                nsteps=self.config[EQ_STEPS], \
-                               dirname="eq_test", \
                                **dict(zip(self.config[EQ_ARGS + KEYS], self.config[EQ_ARGS + VALUES])))
     
     def setup_md(self):
@@ -404,14 +403,13 @@ class System(object):
                                top=self.top, \
                                posres = self.posres, \
                                nsteps=self.config[MD_STEPS], \
-                               dirname="md_test", \
                                multi=self.config[MULTI], \
                                **dict(zip(self.config[MD_ARGS + KEYS], self.config[MD_ARGS + VALUES])))
         
     def equilibriate(self):
         with self.setup_equilibriate() as eqsetup:
             mdres = md.run_md(eqsetup.dirname, **eqsetup)
-            self.universe.load_new(mdres.struct)
+            self.universe.load_new(mdres.structs[0])
         
         self.current_timestep.atomic_equilibriated_positions = self.universe.atoms.positions
         [s.equilibriated() for s in self.subsystems]

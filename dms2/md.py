@@ -78,8 +78,9 @@ class MDManager(Mapping, Hashable):
 
         traceback: A traceback instance.
         """
-        if exc_type is not None and exc_value is not None and traceback is not None:
-            print("deleting {}".format(self.dirname))
+        logging.debug("dirname: {} exc_type {}, exc_value {}, traceback {}".format(self.dirname, exc_type, exc_value, traceback))
+        if exc_type is None and exc_value is None and traceback is None:
+            logging.debug("deleting {}".format(self.dirname))
             #shutil.rmtree(self.dirname)
         else:
             logging.error("MDManager in directory {} __exit__ called with exception {}".format(self.dirname, exc_value))
@@ -93,7 +94,7 @@ def test(dirname):
 
 
 
-class MDrunnerLocal(gromacs.run.MDrunner):
+class MDrunner(gromacs.run.MDrunner):
     """Manage running :program:`mdrun` as mpich2_ multiprocessor job with the SMPD mechanism.
 
     .. _mpich2: http://www.mcs.anl.gov/research/projects/mpich2/
@@ -110,15 +111,22 @@ class MDrunnerLocal(gromacs.run.MDrunner):
         (This is a primitive example for OpenMP. Override it for more
         complicated cases.)
         """
-
-        return ["mpiexec", "-n", "4"]
+        
+        if os.environ.get("SLURM_NPROCS", None) is not None or \
+            os.environ.get('PBS_JOBID', None) is not None:
+            logging.debug("running in SLURM or PBS, not specifying nprocs")
+            return ["mpiexec"]
+        else:
+            nprocs = os.sysconf('SC_NPROCESSORS_ONLN')
+            logging.debug("determined nprocs is {} fron os.sysconf".format(nprocs))
+            return ["mpiexec", "-n", str(nprocs)]
  
     
 
 
     
-def minimize(struct, top, dirname='em', minimize_mdp=config.templates['em.mdp'], 
-             minimize_output='em.pdb', minimize_deffnm="em", mdrunner=MDrunnerLocal, **kwargs):
+def minimize(struct, top, dirname=None, minimize_mdp=config.templates['em.mdp'], 
+             minimize_output='em.pdb', minimize_deffnm="em", mdrunner=MDrunner, **kwargs):
     """
     Energy minimize a system.
     
@@ -167,7 +175,10 @@ def minimize(struct, top, dirname='em', minimize_mdp=config.templates['em.mdp'],
     .. note:: If :func:`~gromacs.mdrun_d` is not found, the function
               falls back to :func:`~gromacs.mdrun` instead.
     """
-    
+    if dirname is None:
+        dirname = tempfile.mkdtemp()
+        logging.debug("created energy minimization dir {}".format(dirname))
+        
     struct = data_tofile(struct, "src.pdb", dirname=dirname)
     top = data_tofile(top, "src.top", dirname=dirname)
     
@@ -253,12 +264,9 @@ def setup_md(struct, top, posres, dirname=None, **kwargs):
     """
     logging.info("[%(dirname)s] Setting up MD with position restraints..." % vars())
     
-    
-    
     if dirname is None:
-        shutil.rmtree("foo", ignore_errors = True)
-        os.mkdir("foo")
-        dirname = path.abspath("foo")#tempfile.mkdtemp(dir="."))
+        dirname = tempfile.mkdtemp()
+        logging.debug("created md dir {}".format(dirname))
         
     struct = data_tofile(struct, "src.pdb", dirname=dirname)
     top = data_tofile(top, "src.top", dirname=dirname)
@@ -266,14 +274,6 @@ def setup_md(struct, top, posres, dirname=None, **kwargs):
     
     kwargs.setdefault('qname', None)
 
-    
-    # reduce size of output files
-    #kwargs.setdefault('nstxout', '50000')   # trr pos
-    #kwargs.setdefault('nstvout', '50000')   # trr veloc
-    #kwargs.setdefault('nstfout', '0')       # trr forces
-    #kwargs.setdefault('nstlog', '500')      # log file
-    #kwargs.setdefault('nstenergy', '2500')  # edr energy
-    #kwargs.setdefault('nstxtcout', '5000')  # xtc pos
     kwargs.setdefault('mdp',config.templates['md_CHARMM27.mdp'])
 
     logging.debug("calling _setup_MD with kwargs: {}".format(kwargs))
@@ -283,15 +283,6 @@ def setup_md(struct, top, posres, dirname=None, **kwargs):
     setup_MD["dirname"] = dirname
     
     logging.debug("finished _setup_MD, recieved: {}".format(setup_MD))
-   
-        
-        #md.run_MD(System.equilibriate_dir, **mdr)
-        
-        #self.universe.load_new(self.struct)
-        
-        #self.hdf_write("", self.universe.atoms.positions)
-        
-        #[s.equilibriated() for s in self.subsystems]
         
     return MDManager(setup_MD)
         
@@ -409,7 +400,7 @@ def solvate(struct, top, box,
     return MDManager(result)
     
     
-def run_md(dirname, md_runner=gromacs.run.MDrunner, **kwargs):
+def run_md(dirname, md_runner=MDrunner, **kwargs):
     """
     actually perform the md run.
     
@@ -428,7 +419,7 @@ def run_md(dirname, md_runner=gromacs.run.MDrunner, **kwargs):
         in result.trajectories.
                     
     """
-    Result = namedtuple("Result", ["struct", "trajectories"])
+    Result = namedtuple("Result", ["structs", "trajectories"])
     
     # pick out the relevant mdrun keywords from kwargs
     mdrun_args = ["s","o","x","cpi","cpo","c","e","g","dhdl","field","table","tablep",
@@ -439,43 +430,46 @@ def run_md(dirname, md_runner=gromacs.run.MDrunner, **kwargs):
                   "pforce","reprod","cpt","cpnum","append","maxh","multi","replex",
                   "reseed","ionize"]
     kwargs = dict([(i, kwargs[i]) for i in kwargs.keys() if i in mdrun_args])
-
-    ncores = 4
     
     # figure out what the output file is, try set default output format to pdb
-    struct = None
+    structs = None
     if kwargs.has_key("deffnm"):
         if kwargs.has_key("c"):
-            struct = kwargs["c"]
+            structs = kwargs["c"]
         else:
-            struct = kwargs["deffnm"] + ".pdb"
-            kwargs["c"] = struct
+            structs = kwargs["deffnm"] + ".pdb"
+            kwargs["c"] = structs
     elif kwargs.has_key["c"]:
-        struct = kwargs["c"]
+        structs = kwargs["c"]
     else:
         # default name according to mdrun man
-        struct = "confout.gro"
+        structs = "confout.gro"
         
-    
-   
+    if kwargs.has_key("multi"):
+        split = os.path.splitext(structs)
+        structs = [split[0] + str(i) + split[1] for i in range(kwargs["multi"])]
+    else:
+        structs = [structs]
+    structs = [os.path.realpath(os.path.join(dirname, s)) for s in structs]
+        
     # create an MDRunner which changes to the specifiec dirname, and 
     # calls mdrun in that dir, then returns to the current dir.     
     runner = md_runner(dirname, **kwargs)
-    runner.mpiexec = "mpiexec"
-    runner.run_check(ncores = ncores)
+    runner.run_check()
 
     trajectories = [os.path.abspath(trr) for trr in glob.glob(dirname + "/*.trr")]
 
-    print("struct", struct)
+    print("structs", structs)
     print("pwd", os.path.curdir)
     print("dirname", dirname)
     
-    struct = os.path.realpath(os.path.join(dirname, struct))
-    if not os.path.isfile(struct):
-        logging.warn("guessed output file name {} not found, is a problem????".format(struct))
-        struct = None
+    found_structs = [s for s in structs if os.path.isfile(s)]
+    notfound_structs = [s for s in structs if not os.path.isfile(s)]
     
-    return Result(struct, trajectories)        
+    for s in notfound_structs:
+        logging.warn("guessed output file name {} not found, is a problem????".format(s))
+    
+    return Result(found_structs, trajectories)        
         
     
 def epic_fail():
