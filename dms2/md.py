@@ -81,7 +81,7 @@ class MDManager(Mapping, Hashable):
         logging.debug("dirname: {} exc_type {}, exc_value {}, traceback {}".format(self.dirname, exc_type, exc_value, traceback))
         if exc_type is None and exc_value is None and traceback is None:
             logging.debug("deleting {}".format(self.dirname))
-            #shutil.rmtree(self.dirname)
+            shutil.rmtree(self.dirname)
         else:
             logging.error("MDManager in directory {} __exit__ called with exception {}".format(self.dirname, exc_value))
             logging.error("MDManager will NOT delete directory {}".format(self.dirname))
@@ -125,7 +125,7 @@ class MDrunner(gromacs.run.MDrunner):
 
 
     
-def minimize(struct, top, dirname=None, minimize_mdp=config.templates['em.mdp'], 
+def minimize(struct, top, posres, dirname=None, 
              minimize_output='em.pdb', minimize_deffnm="em", mdrunner=MDrunner, **kwargs):
     """
     Energy minimize a system.
@@ -181,13 +181,16 @@ def minimize(struct, top, dirname=None, minimize_mdp=config.templates['em.mdp'],
         
     struct = data_tofile(struct, "src.pdb", dirname=dirname)
     top = data_tofile(top, "src.top", dirname=dirname)
+    posres = data_tofile(posres, "posres.itp", dirname=dirname)
+    
+    kwargs.setdefault('mdp',config.templates['em.mdp'])
     
     # gromacs.setup.energy_minimize returns
     # { 'struct': final_struct,
     #   'top': topology,
     #   'mainselection': mainselection,
     # }
-    result = gromacs.setup.energy_minimize(dirname=dirname, mdp=minimize_mdp, struct=struct, 
+    result = gromacs.setup.energy_minimize(dirname=dirname, struct=struct, 
                                          top=top, output=minimize_output, deffnm=minimize_deffnm, 
                                          mdrunner=mdrunner, **kwargs)
     result["dirname"] = dirname

@@ -23,11 +23,8 @@ if len(sys.argv) == 3:
 elif len(sys.argv) == 2:
     tempfile.tempdir = os.path.curdir
     s = system.System('test.hdf')
-    s.begin_timestep()
-    s.minimize()
-    s.equilibriate()
-    s.md()
-    s.end_timestep()
+    s.run()
+    
 else:
     #import subsystems
     #s=system.System("test.hdf")

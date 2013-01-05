@@ -89,6 +89,8 @@ import config
 import md
 import subsystems
 import util
+import time
+import datetime
 
 
 # change MDAnalysis table to read carbon correctly
@@ -97,7 +99,6 @@ MDAnalysis.topology.tables.atomelements["C0"]="C"
 
 
 CURRENT_TIMESTEP = "current_timestep" 
-PREV_TIMESTEP = "prev_timestep"
 SRC_FILES = "src_files"
 FILE_DATA_LIST = ["struct.pdb", "topol.top", "index.ndx", "posres.itp"]
 TIMESTEPS = "timesteps"
@@ -141,6 +142,8 @@ class Timestep(object):
     """
     ATOMIC_MINIMIZED_POSITIONS = "atomic_minimized_positions"
     ATOMIC_EQUILIBRIATED_POSITIONS = "atomic_equilibriated_positions"
+    ATOMIC_STARTING_POSITIONS = "atomic_starting_positions"
+    ATOMIC_FINAL_POSITIONS = "atomic_final_positions"
     TIMESTEP_BEGIN = "timestep_begin"
     TIMESTEP_END = "timestep_end" 
     CG_POSITIONS = "cg_positions"
@@ -165,11 +168,35 @@ class Timestep(object):
         self._group = group
         self.__create_property(Timestep.ATOMIC_MINIMIZED_POSITIONS)
         self.__create_property(Timestep.ATOMIC_EQUILIBRIATED_POSITIONS)
+        self.__create_property(Timestep.ATOMIC_STARTING_POSITIONS)
+        self.__create_property(Timestep.ATOMIC_FINAL_POSITIONS)
         self.__create_property(Timestep.TIMESTEP_END)
         self.__create_property(Timestep.TIMESTEP_BEGIN)
         self.__create_property(Timestep.CG_POSITIONS)
         self.__create_property(Timestep.CG_VELOCITIES)
         self.__create_property(Timestep.CG_FORCES)
+        
+    @property
+    def timestep(self):
+        """
+        the index of the timestep
+        """
+        return int(self._group.name.split("/")[-1])
+        
+        
+    def create_universe(self):
+        data = self._group[STRUCT_PDB][()]
+        
+        
+        with tempfile.NamedTemporaryFile(suffix=".pdb") as f:  
+            # EXTREMLY IMPORTANT to flush the file, 
+            # NamedTemporaryFile returns an OPEN file, and the array writes to this file, 
+            # so we need to flush it, as this file handle remains open. Then the MDAnalysis
+            # universe opens another handle and reads its contents from it. 
+            data.tofile(f.file)
+            f.file.flush()
+            u = MDAnalysis.Universe(f.name)
+            return u
         
 class System(object):
 
@@ -192,8 +219,17 @@ class System(object):
         
         self.hdf = h5py.File(fid)
         self.config = self.hdf[CONFIG].attrs
-        self.universe = self._universe_from_hdf()
         self._box = self.config[BOX]
+        
+        # if there is a current timestep, we assume its garbage and delete it
+        if self.hdf.id.links.exists(CURRENT_TIMESTEP):
+            logging.info("found previous \"current_timestep\" key, this means that a previous simulation likely crashed, deleting it.")
+            del self.hdf[CURRENT_TIMESTEP]
+            
+        # load the universe object from either the last timestep, or from the src_files
+        # its expensive to create a universe, so keep it around for the lifetime
+        # of the system
+        self.universe = self._create_universe()
         
         # load the subsystems
         # this list will remain constant as long as the topology remains constant.
@@ -207,6 +243,7 @@ class System(object):
         
         md_nensemble = self.config[MULTI]
         
+        #md args dictionary
         mdd = dict(zip(self.config[MD_ARGS + KEYS], self.config[MD_ARGS + VALUES]))
         # number of data points in trajectory, md steps / output interval
         md_nsteps = int(self.config[MD_STEPS])/int(mdd[NSTXOUT])
@@ -249,8 +286,20 @@ class System(object):
         else:
             file_key = SRC_FILES + "/" + file_key
         return self.hdf[file_key]
-        
     
+    def __last_timestep(self):
+        """
+        Gets the last completed timestep, or None if this is the first timestep.
+        
+        Public API should only call the "timesteps" generator.
+        """
+        timesteps = [int(k) for k in self.hdf[TIMESTEPS].keys()]
+        if len(timesteps):
+            return Timestep(self.hdf[TIMESTEPS + "/" + str(max(timesteps))])
+        else:
+            return None
+        
+        
     def begin_timestep(self):
         """
         The _begin_timestep and _end_timestep logic are modeled after OpenGL's glBegin and glEnd. 
@@ -261,118 +310,126 @@ class System(object):
         """
         # if there is a current timestep, we assume its garbage and delete it
         if self.hdf.id.links.exists(CURRENT_TIMESTEP):
+            logging.info("found previous \"current_timestep\" key, this means that end_timestep was not called.")
             del self.hdf[CURRENT_TIMESTEP]
-        
-        self.hdf.create_group(CURRENT_TIMESTEP)
             
-        # prev_timestep could only have been created with a valid _end_timestep            
-        src_files = self.hdf[PREV_TIMESTEP] if \
-            self.hdf.id.links.exists(PREV_TIMESTEP) else \
-            self.hdf[SRC_FILES]
+        # create a new current_timestep group, starting time now.
+        current_group = self.hdf.create_group(CURRENT_TIMESTEP)
+        self.current_timestep.timestep_begin = time.time()
+            
+        last = self.__last_timestep()             
+        if last:
+            # link the starting positions to the previous timesteps final positions
+            current_group.id.links.create_soft(Timestep.ATOMIC_STARTING_POSITIONS, 
+                                      last._group.name + "/" + Timestep.ATOMIC_FINAL_POSITIONS)
+            src_files = last._group
+        else:
+            # this is the first timestep, so set start positions to the starting
+            # universe struct.
+            current_group[Timestep.ATOMIC_STARTING_POSITIONS] = self.universe.atoms.positions
+            src_files = self.hdf[SRC_FILES]
         
         # link file data into current     
         for f in FILE_DATA_LIST:
             util.hdf_linksrc(self.hdf, CURRENT_TIMESTEP + "/" + f, src_files.name + "/" + f)
             
+            
     def end_timestep(self):
         """
         move current_timestep to timesteps/n
         """
+        # done with timestep, throws an exception is we do not
+        # have a current timestep.
+        self.current_timestep.timestep_end = time.time()
+        
+        # find the last timestep, and set this one to the next one, and move it there.
         timesteps = [int(k) for k in self.hdf[TIMESTEPS].keys()]
         prev = -1 if len(timesteps) == 0 else max(timesteps)
         finished = TIMESTEPS + "/" + str(prev+1)
         self.hdf.id.move(CURRENT_TIMESTEP, finished)
         
-        # relink prev_timestep to the just finished ts.
-        if self.hdf.id.links.exists(PREV_TIMESTEP):
-            del self.hdf[PREV_TIMESTEP]
-        self.hdf.id.links.create_soft(PREV_TIMESTEP, finished)
-        
         self.hdf.flush()
+        
+        logging.info("completed timestep {}".format(prev+1))
         
     @property
     def current_timestep(self):
         return Timestep(self.hdf[CURRENT_TIMESTEP])
+    
+    @property
+    def timesteps(self):
+        # get all the completed timesteps, the keys are usually out of order, so
+        # have to sort them
+        timesteps = [int(k) for k in self.hdf[TIMESTEPS].keys()]
+        timesteps.sort()
         
-    def _universe_from_hdf(self, key = None):
+        for ts in timesteps:
+            yield Timestep(self.hdf[TIMESTEPS + "/" + str(ts)])
+        
+
+    def _create_universe(self, key = None):
         """
-        returns a Universe object from a structure file stored as a 
-        blob in the hdf file.
+        Creates a universe object from the most recent timestep, or if this is the first 
+        timestep, loads from the 'src_files' key.
         """
 
-        data = None
-        
-        if key is None:
-            # check if restart, use from current timestep
-            if self.hdf.id.links.exists(CURRENT_TIMESTEP):
-                logging.debug("_universe_from_hdf, found struct.pdb in current frame, loading.")
-                data = array(self.hdf[CURRENT_TIMESTEP + "/" + STRUCT_PDB])
-            else:
-                logging.debug("_universe_from_hdf, struct.pdb not in current frame, loading from src_files")
-                data = array(self.hdf[SRC_FILES + "/" + STRUCT_PDB])  
+        last = self.__last_timestep()
+        if last:
+            logging.info("loading universe from most recent timestep of {}".format(last._group.name))
+            return last.create_universe()
         else:
-            data = array(self.hdf[key])
-        
-        with tempfile.NamedTemporaryFile(suffix=".pdb") as f:  
-            # EXTREMLY IMPORTANT to flush the file, 
-            # NamedTemporaryFile returns an OPEN file, and the array writes to this file, 
-            # so we need to flush it, as this file handle remains open. Then the MDAnalysis
-            # universe opens another handle and reads its contents from it. 
-            data.tofile(f.file)
-            f.file.flush()
-            u = MDAnalysis.Universe(f.name)
-            return u
-            
+            logging.info("_universe_from_hdf, struct.pdb not in current frame, loading from src_files")
+            data = array(self.hdf[SRC_FILES + "/" + STRUCT_PDB])  
+    
+            with tempfile.NamedTemporaryFile(suffix=".pdb") as f:  
+                # EXTREMLY IMPORTANT to flush the file, 
+                # NamedTemporaryFile returns an OPEN file, and the array writes to this file, 
+                # so we need to flush it, as this file handle remains open. Then the MDAnalysis
+                # universe opens another handle and reads its contents from it. 
+                data.tofile(f.file)
+                f.file.flush()
+                u = MDAnalysis.Universe(f.name)
+                return u
+                
 
         
     def run(self):
-        for i in range(int(self.config["cg_steps"])):
-            logging.info("starting step {}".format(i))
-            self.timestep = i
+        last = self.__last_timestep()
+        start = last.timestep + 1 if last else 0
+        del last
+        end = int(self.config[CG_STEPS])
+        
+        logging.info("running timesteps {} to {}".format(start, end))
+        
+        for _ in range(start, end):
             self.step()
-            logging.info("completed step {}".format(i))
+            
+        logging.info("completed all {} timesteps".format(end-start))
    
 
     def step(self):
         """
-        do some stuff
+        performs a single time step
         """
-        self._begin_timestep()
+        self.begin_timestep()
         
         # md - runs md with current state, reads in md output and populates 
         # segments statistics. 
         self.minimize()
         
-        self.thermalize()
+        self.equilibriate()
         
         self.md()
         
         self.evolve()
         
-        self._end_timestep()
-        logging.info("completed step {}".format(self.timestep))
+        self.end_timestep()
+        
         
         
     def evolve(self):
-        beta_t = float(self.config["beta_t"])
-        D = diffusion(self.velocities)
-        f = mean(self.forces, axis=0).flatten()
-        Df = dot(D,f)
-        
-        self.hdf_write("DIFFUSION", D)
-        
-        for s in enumerate(self.subsystems):
-            s[1].translate(Df[s[0]:s[0]+self.ncgs])
-            
-        self.hdf_write("ATOMIC_POS", self.universe.atoms.positions)
-        
-        # write to struct, for next time step.
-        w = MDAnalysis.Writer(self.struct)
-        w.write(self.universe)
-        w.close()
-        
 
-
+        self.current_timestep.atomic_final_positions = self.universe.atoms.positions
         
 
     def setup_equilibriate(self):
@@ -533,7 +590,11 @@ class System(object):
         self.universe is loaded with the minimized structure
         all subsystems are notified.
         """
-        with md.minimize(struct=self.universe, top=self.top, nsteps=self.config[MN_STEPS]) as mn:
+        with md.minimize(struct=self.universe, \
+                         top=self.top, \
+                         posres = self.posres, \
+                         nsteps=self.config[MN_STEPS], \
+                          **dict(zip(self.config[MN_ARGS + KEYS], self.config[MN_ARGS + VALUES]))) as mn:
 
             print(mn)
         
@@ -577,7 +638,8 @@ class System(object):
 
         
         
-        
+def testsys():
+    return System('test.hdf')
     
         
 from numpy.fft import fft, ifft, fftshift
@@ -726,13 +788,13 @@ Au2 = {
     'temperature' : 300.0, 
     'struct': '/home/andy/tmp/1OMB/1OMB.pdb',
     "subsystem_select": "not resname SOL",
-    "cg_steps":10,
+    "cg_steps":30,
     "beta_t":10.0,
     "top_args": {},
-    "minimize_steps":100,
+    "minimize_steps":5,
     "md_steps":50,
     "multi":4,
-    "equilibriate_steps":1000,
+    "equilibriate_steps":50,
     "solvate":False,
     } 
     
@@ -758,12 +820,12 @@ def create_config(fid,
                   subsystem_factory = "dms2.subsystems.RigidSubsystemFactory",
                   subsystem_selects = ["not resname SOL"],
                   subsystem_args = [],
-                  cg_steps = 50,
+                  cg_steps = 10,
                   beta_t  = 10.0,
                   mn_steps = 500,
                   md_steps = 100,
                   multi = 1,
-                  eq_steps = 100,
+                  eq_steps = 10,
                   mn_args = {},
                   eq_args = DEFAULT_EQ_ARGS,
                   md_args = DEFAULT_MD_ARGS,
