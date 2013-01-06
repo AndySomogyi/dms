@@ -4,9 +4,8 @@ Created on Oct 3, 2012
 @author: andy
 '''
 import subsystems
-import MDAnalysis as mda
 
-from numpy import array, ones, sum, newaxis, pi, sin, cos, arctan2
+from numpy import sum, newaxis, pi, sin, cos, arctan2
 
 class RigidSubsystem(subsystems.SubSystem):
     """

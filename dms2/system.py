@@ -215,6 +215,10 @@ class System(object):
     state. 
     """    
     
+    # define the __slots__ class variable, this helps preven typos by raising an error if a
+    # ivar is set that is not one of these here. 
+    __slots__ = ["hdf", "config", "universe", "_box", "ncgs", "subsystems", "cg_positions", "cg_velocities", "cg_forces"]
+    
     def __init__(self, fid):      
         
         self.hdf = h5py.File(fid)
@@ -251,13 +255,13 @@ class System(object):
         nrs = len(self.subsystems)
         
         # cg: nensembe x n segment x 3
-        self.pos        = zeros((md_nensemble,nrs,md_nsteps, self.ncgs))
-        self.forces     = zeros((md_nensemble,nrs,md_nsteps, self.ncgs))
-        self.velocities = zeros((md_nensemble,nrs,md_nsteps, self.ncgs))
+        self.cg_positions        = zeros((md_nensemble,nrs,md_nsteps, self.ncgs))
+        self.cg_forces     = zeros((md_nensemble,nrs,md_nsteps, self.ncgs))
+        self.cg_velocities = zeros((md_nensemble,nrs,md_nsteps, self.ncgs))
 
-        logging.info("pos {}".format(self.pos.shape))
-        logging.info("frc {}".format(self.forces.shape))
-        logging.info("vel {}".format(self.velocities.shape))
+        logging.info("pos {}".format(self.cg_positions.shape))
+        logging.info("frc {}".format(self.cg_forces.shape))
+        logging.info("vel {}".format(self.cg_velocities.shape))
         
     @property
     def struct(self):
@@ -428,8 +432,16 @@ class System(object):
         
         
     def evolve(self):
+        
+        # forward euler
+         
+        
+        
 
         self.current_timestep.atomic_final_positions = self.universe.atoms.positions
+        
+       
+        
         
 
     def setup_equilibriate(self):
@@ -489,9 +501,9 @@ class System(object):
         """
         
         # zero the state variables (for this frame)
-        self.pos[:] = 0.0
-        self.forces[:] = 0.0
-        self.velocities[:] = 0.0
+        self.cg_positions[:] = 0.0
+        self.cg_forces[:] = 0.0
+        self.cg_velocities[:] = 0.0
         
         # save the universe to a tmp file to load back once the trajectories 
         # are processed.
@@ -506,23 +518,24 @@ class System(object):
                 print(f)
                 self.universe.load_new(f)
                 for tsi, _ in enumerate(self.universe.trajectory):
-                    if tsi < self.velocities.shape[2]:
+                    if tsi < self.cg_velocities.shape[2]:
                         for si, s in enumerate(self.subsystems):
                             pos,vel,frc = s.frame()
-                            self.pos       [fi,si,tsi,:] = pos
-                            self.velocities[fi,si,tsi,:] = vel
-                            self.forces    [fi,si,tsi,:] = frc
+                            self.cg_positions       [fi,si,tsi,:] = pos
+                            self.cg_velocities[fi,si,tsi,:] = vel
+                            self.cg_forces    [fi,si,tsi,:] = frc
                             
                             if(tsi % 25 == 0):
-                                print("processing frame {},\t{}%".format(tsi, 100.0*float(tsi)/float(self.velocities.shape[2])))
+                                print("processing frame {},\t{}%".format(tsi, 100.0*float(tsi)/float(self.cg_velocities.shape[2])))
             
             # done with trajectories, load original contents of universe back
             self.universe.load_new(tmp.name)
             
+        # write the coarse grained pos, vel and forces to the current timestep.
         timestep = self.current_timestep
-        timestep.cg_positions = self.pos
-        timestep.cg_velocities = self.velocities
-        timestep.cg_forces = self.forces
+        timestep.cg_positions = self.cg_positions
+        timestep.cg_velocities = self.cg_velocities
+        timestep.cg_forces = self.cg_forces
             
 
     def topology_changed(self):
@@ -604,52 +617,19 @@ class System(object):
         [s.minimized() for s in self.subsystems]
             
         
-    def read_frame(self, hdf, nframe):
-        f = h5py.File(hdf, "r")
-        grp = f[str(nframe)]
-        
-        self.cg = array(grp["CG"],'f')
-        self.forces = array(grp["FORCES"],'f')
-        self.velocities = array(grp["VELOCITIES"],'f')
-        self.universe.atoms.positions = array(grp["FINAL_POSITIONS"],'f')
-        
-        
-    def test(self):
-        # {'top': '/home/andy/tmp/1OMB/top/system.top', 
-        # 'dirname': 'md', 'deffnm': 'md', 'struct': '/home/andy/tmp/1OMB/equlibriate/equilibriate.gro', 
-        # 'nsteps': 1000}
-        self.top =  '/home/andy/tmp/1OMB/top/system.top'
-        self.struct = '/home/andy/tmp/1OMB/equlibriate/equilibriate.gro'
-        
-    def key_tofile(self, key, f, timestep=None):
-        """
-        """
-        timestep = self.timestep if timestep is None else timestep
-        data = self.hdf["{}/{}".format(timestep, key)][()]
-        data.tofile(f)
-        
-    def key_fromfile(self, key, f, timestep=None):
-        """
-        """
-        timestep = self.timestep if timestep is None else timestep
-        self.hdf["{}/{}".format(timestep,key)] = fromfile(f, dtype=uint8)
-        
-        
-
-        
-        
 def testsys():
     return System('test.hdf')
     
         
 from numpy.fft import fft, ifft, fftshift
 
+"""
 def diffusion(vel, D):
-    """
+    
     calculate the matrix of diffusion coeficients.
     @param vel: a #ensembles x #subsytems x #frames x #cg array
     @return: a (#subsytems x #cg) x (#subsytems x #cg) array
-    """ 
+    
     print("shape: {}".format(D.shape))
     ndiff = int((3*len(self.segments)) ** 2)/2
     idiff = 0
@@ -670,6 +650,7 @@ def diffusion(vel, D):
                     if idiff % stride == 0:
                         print("diffusion {}% done".format(round(100 * float(idiff) / ndiff)))
                     #print("D[[{},{}],[{},{}]]={}".format(i,ii,j,jj,corr))
+"""
 
 
 def fft_corr(x1,x2):
@@ -687,114 +668,18 @@ def fft_corr(x1,x2):
     return corr
 
 
-
-conf = { 
-    'temperature' : 300.0, 
-    'struct': '/home/andy/tmp/1OMB/equlibriate/equilibriate.gro',
-    "subsystems" : [subsystems.RigidSubsystemFactory, "protein"],
-    "cg_steps":150,
-    "beta_t":10.0,
-    "top_args": {},
-    "minimize":{"nsteps":1000},
-    "md":{"nsteps":1000},
-    "multi":10,
-    "equilibriate":{"nsteps":1000},
-    "solvate":False,
-    "top":"/home/andy/tmp/1OMB/top/system.top"
-    } 
-
-C60 = { 
-    'temperature' : 300.0, 
-    'struct': 'C60.sol.pdb',
-    "subsystems" : [subsystems.RigidSubsystemFactory, "resid 1"],
-    "cg_steps":150,
-    "beta_t":10.0,
-    "top_args": {},
-    "minimize":{"nsteps":1000},
-    "md":{"nsteps":50000},
-    "multi":100,
-    "equilibriate":{"nsteps":1000},
-    "solvate":False,
-    "top":"C60.top",
-    "hdf":"out.hdf"
-    } 
-
-C2 = { 
-    'temperature' : 300.0, 
-    'struct': 'test.pdb',
-    "subsystems" : [subsystems.RigidSubsystemFactory, "protein"],
-    "cg_steps":150,
-    "beta_t":10.0,
-    "top_args": {},
-    "minimize":{"nsteps":1000},
-    "md":{"nsteps":100000},
-    "multi":20,
-    "equilibriate":{"nsteps":1000},
-    "solvate":False,
-    "top":"topol.top"
-    } 
-
-Au = { 
-    'temperature' : 300.0, 
-    'struct': '/home/andy/tmp/Au/100.0_10.0.sol.pdb',
-    'top': '/home/andy/tmp/Au/100.0_10.0.top',
-    "subsystems" : [subsystems.RigidSubsystemFactory, "not resname SOL"],
-    "cg_steps":150,
-    "beta_t":10.0,
-    "top_args": {},
-    "minimize":{"nsteps":1000},
-    "md":{"nsteps":250000},
-    "multi":1,
-    "equilibriate":{"nsteps":1000},
-    "solvate":False,
-    "hdf":"100.0_10.0.hdf"
-    } 
-
-"""
-
-def test(fbase):
-    print(os.getcwd())
-    
-    logger = logging.getLogger()
-    logger.handlers[0].stream.close()
-    logger.removeHandler(logger.handlers[0])
-    
-    handler = logging.StreamHandler()
-
-
-
-    handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter("%(asctime)s %(filename)s, %(lineno)d, %(funcName)s: %(message)s")
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    #logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', filename=fbase + ".log",level=logging.DEBUG)
-    
-    Au2["struct"] = Au2["struct"].format(fbase)
-    Au2["top"] = Au2["top"].format(fbase)
-    Au2["hdf"] = Au2["hdf"].format(fbase)
-    
-    s=System(Au2)
-    
-    for ss in s.subsystems:
-        print(ss.atoms.masses())
-        
-    #s._write_system_struct()
-    
-    s._processes_trajectories(["/home/andy/Au/{}.trr".format(fbase)])
-"""
-
 Au2 = { 
     'box' : [50.0, 50.0, 50.0],      
     'temperature' : 300.0, 
     'struct': '/home/andy/tmp/1OMB/1OMB.pdb',
     "subsystem_select": "not resname SOL",
-    "cg_steps":30,
+    "cg_steps":5,
     "beta_t":10.0,
     "top_args": {},
-    "minimize_steps":5,
+    "mn_steps":5,
+    "eq_steps":50,
     "md_steps":50,
     "multi":4,
-    "equilibriate_steps":50,
     "solvate":False,
     } 
     
@@ -912,7 +797,7 @@ def create_config(fid,
 
         # check struct
         try:
-            gromacs.gmxcheck(f=struct)
+            gromacs.gmxcheck(f=struct) #@UndefinedVariable
             print("structure file {} appears OK".format(struct))
             filedata_fromfile("struct.pdb", struct)
         except Exception, e:
