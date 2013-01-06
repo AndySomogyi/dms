@@ -57,16 +57,6 @@ Config Dictionary Specification
         attributes such as segment and residue info. The coordinates in this
         pdb are NOT USED to store coordinate info.
         
-        
-    
-    
-        
-    
-        
-            
-    
-    
-    
                  
 """
 
@@ -83,10 +73,12 @@ from numpy import array, zeros, transpose, dot, reshape, \
 import numpy.random
 import tempfile
 import MDAnalysis
+import dynamics
 
 import h5py #@UnresolvedImport
 import config
 import md
+import diffusion
 import subsystems
 import util
 import time
@@ -247,17 +239,18 @@ class System(object):
         
         md_nensemble = self.config[MULTI]
         
-        #md args dictionary
+        # md args dictionary
         mdd = dict(zip(self.config[MD_ARGS + KEYS], self.config[MD_ARGS + VALUES]))
         # number of data points in trajectory, md steps / output interval
         md_nsteps = int(self.config[MD_STEPS])/int(mdd[NSTXOUT])
         
+        # number of subsystems
         nrs = len(self.subsystems)
         
-        # cg: nensembe x n segment x 3
-        self.cg_positions        = zeros((md_nensemble,nrs,md_nsteps, self.ncgs))
-        self.cg_forces     = zeros((md_nensemble,nrs,md_nsteps, self.ncgs))
-        self.cg_velocities = zeros((md_nensemble,nrs,md_nsteps, self.ncgs))
+        # cg: nensembe x n segment x n_step x n_cg
+        self.cg_positions  = zeros((md_nensemble,nrs,md_nsteps,self.ncgs))
+        self.cg_forces     = zeros((md_nensemble,nrs,md_nsteps,self.ncgs))
+        self.cg_velocities = zeros((md_nensemble,nrs,md_nsteps,self.ncgs))
 
         logging.info("pos {}".format(self.cg_positions.shape))
         logging.info("frc {}".format(self.cg_forces.shape))
@@ -278,6 +271,10 @@ class System(object):
     @property
     def box(self):
         return self._box
+    
+    @property
+    def beta_t(self):
+        return float(self.config[BETA_T])
     
     def _get_file_data(self, file_key):
         """
@@ -434,16 +431,18 @@ class System(object):
     def evolve(self):
         
         # forward euler
-         
+        # result = coordinate_ops + beta() * dt * Df
+        Df = dynamics.diffusion_force(self) * self.beta_t
         
+        # Df is a column vector, change it to a row vector, as the subsystems
+        # expect a length(ncg) row vector. 
+        Df = Df.transpose()
         
-
+        for i, s in enumerate(self.subsystems):
+            s.translate(Df[i*self.ncgs:self.ncgs])
+            
         self.current_timestep.atomic_final_positions = self.universe.atoms.positions
         
-       
-        
-        
-
     def setup_equilibriate(self):
         """
         setup an equilibriation md run using the contents of the universe, but do not actually run it.
@@ -615,6 +614,52 @@ class System(object):
             
         self.current_timestep.atomic_minimized_positions = self.universe.atoms.positions
         [s.minimized() for s in self.subsystems]
+        
+        
+    def tofile(self,traj):
+        """
+        Write the system to a conventional MD file format, either pdb, or trr. 
+        
+        if traj ends with 'pdb', the starting structure is saved as a pdb, otherwise, 
+        all the frames are written to a trajectory (trr). This is usefull for VMD
+        where one could perform:
+            sys.tofile("somefile.pdb")
+            sys.tofile("somefile.trr"),
+        then call vmd with these file args.
+        """
+        universe = None
+        writer = None
+        ext = os.path.splitext(traj)[-1]
+        if ext.endswith("pdb"):
+            for ts in self.timesteps:
+                universe = ts.create_universe()
+                writer = MDAnalysis.Writer(traj,numatoms=len(universe.atoms))
+                writer.write(universe)
+                return
+        else:
+            for ts in self.timesteps:
+                if universe is None:
+                    universe = ts.create_universe()
+                    writer = MDAnalysis.Writer(traj,numatoms=len(universe.atoms))
+                else:
+                    universe.atoms.positions = ts.atomic_starting_positions
+                writer.write(universe)
+                
+    def visualize(self):
+        dirname = tempfile.mkdtemp()
+        struct = dirname + "/struct.pdb"
+        traj = dirname + "/traj.trr"
+        
+        
+        self.tofile(struct)
+        self.tofile(traj)
+        
+        os.system("vmd {} {}".format(struct, traj))
+        
+        
+        
+        
+            
             
         
 def testsys():
@@ -847,63 +892,8 @@ def create_config(fid,
         
                     
             
-            
-        
-        
-    
-    """
-
-    'top': '/home/andy/tmp/Au/{}.top',
-    "subsystem.class" : "dms2.subsystems.RigidSubsystemFactory",
-    "subsystem.args": "not resname SOL",
-    "cg_steps":150,
-    "beta_t":10.0,
-    "top_args": {},
-    "minimize":{"nsteps":1000},
-    "md":{"nsteps":250000},
-    "multi":1,
-    "equilibriate":{"nsteps":1000},
-    "solvate":False,
-    "hdf":"{}.hdf"
-    """
-    
-    
-        
-    
-    
-
-def main():
-    
-    import dms2.subsystems
-    #ctest()
-    """
-    print(os.getcwd())
-    
-    s=System(C60)
-    
-    
-    
-    s.minimize()
-    
-    s.equilibriate()
-    
-    #s.test()
-    s.md()
-    """
-    
-
 
     
-def hdf2trr(pdb,hdf,trr):
-    u = MDAnalysis.Universe(pdb)
-    w = MDAnalysis.Writer(trr,numatoms=len(u.atoms))
-    f = h5py.File(hdf, "r")
-    for i in range(len(f.keys())):
-        frame = array(f["{}/POSITIONS".format(i)])
-        u.atoms.positions = frame
-        w.write(u)
-    w.close()
-    f.close()
     
 def hdf2pdb(pdb,hdf,frame,pdb2):
     u = MDAnalysis.Universe(pdb)
