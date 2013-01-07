@@ -6,7 +6,7 @@ Created on Nov 2, 2012
 
 from numpy import array, ndarray, arange, zeros, convolve, sum, std, mean, cumsum
 from random import randrange
-import h5py
+import h5py #@UnresolvedImport
 import pylab as p
 
 def correlation(x1, x2, window=None):
@@ -74,7 +74,7 @@ def msd(x1,x2,npts,tau):
     n = x1.shape[0]
 
     if npts + tau >= n:
-        raise Error("bad")
+        raise Exception("bad")
 
     start = randrange(0,n-npts-tau)
     result = zeros((tau,x1.shape[1]))
@@ -91,17 +91,15 @@ def msd(x1,x2,npts,tau):
     
         
 
-def test_xacf(x,tau):
-    
-    xa=zeros((len(tau),x.shape[0]*3))
-    for i in arange(x.shape[0]):
-        for j in tau:
-            xx=x[i,0,:,:]
-            xa[j-1,i:i+3] = xacf(xx,xx,j)/j
-    p.plot(xa)
-    p.show()
-    
-    
+#def test_xacf(x,tau):
+#    
+#    xa=zeros((len(tau),x.shape[0]*3))
+#    for i in arange(x.shape[0]):
+#        for j in tau:
+#            xx=x[i,0,:,:]
+#            xa[j-1,i:i+3] = xacf(xx,xx,j)/j
+#    p.plot(xa)
+#    p.show()
 
 def vacf1(v1, v2, acflen=None):
     """

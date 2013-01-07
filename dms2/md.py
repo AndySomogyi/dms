@@ -21,7 +21,7 @@ import gromacs.run
 import config
 from collections import namedtuple
 from os import path
-from util import data_tofile
+from util import data_tofile, is_env_set
 import shutil
 import tempfile
 import glob
@@ -79,16 +79,18 @@ class MDManager(Mapping, Hashable):
         traceback: A traceback instance.
         """
         logging.debug("dirname: {} exc_type {}, exc_value {}, traceback {}".format(self.dirname, exc_type, exc_value, traceback))
-        if exc_type is None and exc_value is None and traceback is None:
+        dms_debug = is_env_set("DMS_DEBUG")
+        if not dms_debug and exc_type is None and exc_value is None and traceback is None:
             logging.debug("deleting {}".format(self.dirname))
             shutil.rmtree(self.dirname)
         else:
-            logging.error("MDManager in directory {} __exit__ called with exception {}".format(self.dirname, exc_value))
-            logging.error("MDManager will NOT delete directory {}".format(self.dirname))
+            if dms_debug:
+                logging.info("DMS_DEBUG is set, NOT deleting temporary directory {}".format(self.dirname))
+            else:
+                logging.error("MDManager in directory {} __exit__ called with exception {}".format(self.dirname, exc_value))
+                logging.error("MDManager will NOT delete directory {}".format(self.dirname))
        
 
-        
-        
 def test(dirname):
     return MDManager({'dirname':dirname})
 

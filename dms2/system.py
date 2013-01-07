@@ -1,4 +1,7 @@
 """
+@group environment variables:
+    DMS_DEBUG: if set to , temporary directores are NOT deleted, this might be usefull
+    for debugging MD issues.
 
 Config Dictionary Specification
 {
@@ -891,20 +894,6 @@ def create_config(fid,
         hdf.create_group("timesteps")
         
                     
-            
-
-    
-    
-def hdf2pdb(pdb,hdf,frame,pdb2):
-    u = MDAnalysis.Universe(pdb)
-    w = MDAnalysis.Writer(pdb2,numatoms=len(u.atoms))
-    f = h5py.File(hdf, "r")
-    
-    frame = array(f["{}/POSITIONS".format(frame)])
-    u.atoms.positions = frame
-    w.write(u)
-    w.close()
-    f.close()
     
 def test_md():
     sys = System("test.hdf")

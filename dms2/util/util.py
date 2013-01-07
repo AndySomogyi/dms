@@ -83,6 +83,22 @@ def get_class( klass ):
     for comp in parts[1:]:
         m = getattr(m, comp)            
     return m
+
+def is_env_set(env):
+    """
+    returns True if the enviornment variable is set to 'yes', 'true' or non-zero integer,
+    False otherwise
+    """
+    try:
+        var = os.environ[env].strip().upper()
+        try:
+            return int(var) != 0
+        except:
+            pass
+        return var == "TRUE" or var == "YES"
+    except:
+        pass
+    return False
         
         
         
