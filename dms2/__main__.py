@@ -10,26 +10,41 @@ import sys
 import tempfile
 import os
 
-print("hello")
-
-print(__name__)
-
-
-
-#print(util.get_class(sys.argv[1]))
 
 if len(sys.argv) == 3:
-    system.ctest(sys.argv[1], sys.argv[2])
+    if sys.argv[1] == "dpc":
+        system.dpctest(sys.argv[2])
+    else:
+        system.ctest(sys.argv[1], sys.argv[2])
 elif len(sys.argv) == 2:
     tempfile.tempdir = os.path.curdir
     s = system.System('test.hdf')
-    s.run()
     
-else:
-    #import subsystems
-    #s=system.System("test.hdf")
-    #s._begin_timestep()
-    #s.minimize()
+    if sys.argv[1] == "mn":
+        os.environ["DMS_DEBUG"] = "TRUE"
+        s.begin_timestep()
+        s.minimize()
+        s.end_timestep()
+    elif sys.argv[1] == "eq":
+        os.environ["DMS_DEBUG"] = "TRUE"
+        s.begin_timestep()
+        s.equilibriate()
+        s.end_timestep()
+    elif sys.argv[1] == "md":
+        os.environ["DMS_DEBUG"] = "TRUE"
+        s.begin_timestep()
+        s.md()
+        s.end_timestep()
+    elif sys.argv[1] == "step":
+        os.environ["DMS_DEBUG"] = "TRUE"
+        s.step()
+    elif sys.argv[1] == "test":
+        os.environ["DMS_DEBUG"] = "TRUE"
+        s._load_ts(s.current_timestep)
+        s.evolve()
+        
+    else:
     
-    s=system.System("test.hdf")
-    s.equilibriate()
+        s.run()
+    
+

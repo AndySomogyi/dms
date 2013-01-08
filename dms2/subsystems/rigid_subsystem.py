@@ -53,8 +53,17 @@ class RigidSubsystem(subsystems.SubSystem):
     
     def equilibriated(self):
         pass
+      
+def RigidSubsystemFactory(system, selects, *args): 
     
-    
-    
-def RigidSubsystemFactory(system, selects, *args):
-    return (3, [RigidSubsystem(system, select, *args) for select in selects])
+    if len(args) == 1:
+        toks = str(args[0]).split()
+        if len(toks) == 2 and toks[0].lower() == "resid" and toks[1].lower() == "unique":
+            groups = [system.universe.selectAtoms(s) for s in selects]
+            resids = [resid for g in groups for resid in g.resids()]
+            selects = ["resid " + str(resid) for resid in resids]
+            
+    # test to see if the generated selects work
+    [system.universe.selectAtoms(select) for select in selects]
+
+    return (3, [RigidSubsystem(system, select) for select in selects])

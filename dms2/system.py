@@ -86,6 +86,7 @@ import subsystems
 import util
 import time
 import datetime
+import collections
 
 
 # change MDAnalysis table to read carbon correctly
@@ -178,7 +179,6 @@ class Timestep(object):
         """
         return int(self._group.name.split("/")[-1])
         
-        
     def create_universe(self):
         data = self._group[STRUCT_PDB][()]
         
@@ -192,6 +192,9 @@ class Timestep(object):
             f.file.flush()
             u = MDAnalysis.Universe(f.name)
             return u
+    
+    def flush(self):
+        self._group.file.flush()
         
 class System(object):
 
@@ -199,15 +202,6 @@ class System(object):
     """
     @ivar subsystems: a list of subsystems, remains constant so long 
                       as the topology does not change.
-                      
-    @ivar qtot = total charge, set by solvate
-    @ivar mainselection = set by solvate, defaults to "Protein",
-    @ivar ndx = the index file, set by solvate, defaults to 'main.ndx'
-    
-    @ivar subsystems: a list of subsystems
-    
-    @ivar _universe: an MDAnalysis Universe object that maintains the atomic 
-    state. 
     """    
     
     # define the __slots__ class variable, this helps preven typos by raising an error if a
@@ -220,10 +214,11 @@ class System(object):
         self.config = self.hdf[CONFIG].attrs
         self._box = self.config[BOX]
         
-        # if there is a current timestep, we assume its garbage and delete it
+        # if there is a current timestep, keep it around for debugging purposes
         if self.hdf.id.links.exists(CURRENT_TIMESTEP):
-            logging.info("found previous \"current_timestep\" key, this means that a previous simulation likely crashed, deleting it.")
-            del self.hdf[CURRENT_TIMESTEP]
+            print("WARNING, found previous \"current_timestep\" key, this means that a previous simulation likely crashed")
+            logging.warn("found previous \"current_timestep\" key, this means that a previous simulation likely crashed")
+
             
         # load the universe object from either the last timestep, or from the src_files
         # its expensive to create a universe, so keep it around for the lifetime
@@ -442,7 +437,7 @@ class System(object):
         Df = Df.transpose()
         
         for i, s in enumerate(self.subsystems):
-            s.translate(Df[i*self.ncgs:self.ncgs])
+            s.translate(Df[0,i*self.ncgs:i*self.ncgs+self.ncgs])
             
         self.current_timestep.atomic_final_positions = self.universe.atoms.positions
         
@@ -459,6 +454,7 @@ class System(object):
                                top=self.top, \
                                posres = self.posres, \
                                nsteps=self.config[EQ_STEPS], \
+                               deffnm="eq", \
                                **dict(zip(self.config[EQ_ARGS + KEYS], self.config[EQ_ARGS + VALUES])))
     
     def setup_md(self):
@@ -475,6 +471,7 @@ class System(object):
                                posres = self.posres, \
                                nsteps=self.config[MD_STEPS], \
                                multi=self.config[MULTI], \
+                               deffnm="md", \
                                **dict(zip(self.config[MD_ARGS + KEYS], self.config[MD_ARGS + VALUES])))
         
     def equilibriate(self):
@@ -538,6 +535,7 @@ class System(object):
         timestep.cg_positions = self.cg_positions
         timestep.cg_velocities = self.cg_velocities
         timestep.cg_forces = self.cg_forces
+        timestep.flush()
             
 
     def topology_changed(self):
@@ -609,6 +607,7 @@ class System(object):
                          top=self.top, \
                          posres = self.posres, \
                          nsteps=self.config[MN_STEPS], \
+                         deffnm="mn", \
                           **dict(zip(self.config[MN_ARGS + KEYS], self.config[MN_ARGS + VALUES]))) as mn:
 
             print(mn)
@@ -658,6 +657,29 @@ class System(object):
         self.tofile(traj)
         
         os.system("vmd {} {}".format(struct, traj))
+        
+    def _load_ts(self, ts):
+        # ["hdf", "config", "universe", "_box", "ncgs", "subsystems", "cg_positions", "cg_velocities", "cg_forces"]
+        try:
+            self.universe.atoms.positions[()] = ts.atomic_starting_positions
+        except:
+            print("failed to set atomic positions")
+            
+        try:
+            self.cg_positions[()] = ts.cg_positions
+        except:
+            print("failed to set cg_positions")
+            
+        try:
+            self.cg_velocities = ts.cg_velocities
+        except:
+            print("failed to set cg_velocities")
+            
+        try:
+            self.cg_forces[()] = ts.cg_forces
+        except:
+            print("failed to set cg_forces")
+        
         
         
         
@@ -720,7 +742,24 @@ Au2 = {
     'box' : [50.0, 50.0, 50.0],      
     'temperature' : 300.0, 
     'struct': '/home/andy/tmp/1OMB/1OMB.pdb',
-    "subsystem_select": "not resname SOL",
+    "subsystem_selects": "not resname SOL",
+    "cg_steps":5,
+    "beta_t":10.0,
+    "top_args": {},
+    "mn_steps":5,
+    "eq_steps":50,
+    "md_steps":50,
+    "multi":4,
+    "solvate":False,
+    } 
+
+dpc = { 
+    'box' : [90.0, 90.0, 90.0],      
+    'temperature' : 300.0, 
+    'struct': 'DPC-Self-CHARMM36.pdb',
+    'top' :  '54_DPC_CHARMM36_h2o.top',
+    "subsystem_selects": ["resname DPC"],
+    "subsystem_args":["resid unique"],
     "cg_steps":5,
     "beta_t":10.0,
     "top_args": {},
@@ -734,6 +773,9 @@ Au2 = {
 def ctest(pdb, hdf):
     Au2['struct'] = pdb
     create_config(fid=hdf, **Au2)
+    
+def dpctest(hdf):
+    create_config(fid=hdf, **dpc)
 
 DEFAULT_MD_ARGS = { "mdp":config.templates["md_CHARMM27.mdp"],  # the default mdp template \
                     "nstxout": 10,    # trr pos
@@ -749,6 +791,7 @@ def create_config(fid,
                   struct,
                   box,
                   top = None,
+                  posres = None,
                   temperature = 300,
                   subsystem_factory = "dms2.subsystems.RigidSubsystemFactory",
                   subsystem_selects = ["not resname SOL"],
@@ -763,14 +806,12 @@ def create_config(fid,
                   eq_args = DEFAULT_EQ_ARGS,
                   md_args = DEFAULT_MD_ARGS,
                   solvate = False,
-                  posres=None,
                   ndx=None,
                   **kwargs):
     
     import gromacs
     
     with h5py.File(fid, "w") as hdf:
-
         conf = hdf.create_group("config").attrs
         src_files = hdf.create_group("src_files")
 
@@ -780,7 +821,6 @@ def create_config(fid,
             except KeyError:
                 pass
             src_files[str(keyname)] = fromfile(filename, dtype=uint8)
-
 
         # create an attr key /  value in the config attrs
         def attr(keyname, typ, value):
@@ -797,32 +837,12 @@ def create_config(fid,
                           format(keyname, value, typ))
                     raise e
                 
-                
         try:
             box = array(box) 
             print("periodic boundary conditions: {}".format(box))
             conf[BOX] = box
         except Exception, e:
             print("error reading periodic boundary conditions")
-            raise e
-
-        try:
-            factory = util.get_class(subsystem_factory)
-            test_ncgs, test_ss = factory(None, subsystem_selects, *subsystem_args)
-            if len(test_ss) == len(subsystem_selects):
-                print("subsystem factory {} produces correct number of subsystems from {}".
-                      format(subsystem_factory, subsystem_selects))
-                print("will use {} coarse grained variables".format(test_ncgs))
-            else:
-                raise ValueError("subsystem factory {} is valid, but does NOT produce correct number of subsystems from {}".
-                      format(subsystem_factory, subsystem_selects))
-            conf[SUBSYSTEM_FACTORY] = subsystem_factory
-            conf[SUBSYSTEM_SELECTS] = subsystem_selects
-            conf[SUBSYSTEM_ARGS] = subsystem_args
-            print("{}: {}".format(SUBSYSTEM_FACTORY, subsystem_factory))
-
-        except Exception, e:
-            print("error creating subsystem_class, {}".format(e))
             raise e
 
         try:
@@ -883,32 +903,52 @@ def create_config(fid,
                         filedata_fromfile(INDEX_NDX, sol["ndx"])
                         filedata_fromfile(STRUCT_PDB, sol["struct"])
                         filedata_fromfile(TOPOL_TOP, sol["top"])
+        else:
+            # use user specified top
+            print("using user specified topology file {}".format(top))
 
-        if posres is not None:
-            filedata_fromfile("posres.itp", posres)
-
-        if ndx is not None:
-            filedata_fromfile("index.ndx", ndx)
-
+            filedata_fromfile(TOPOL_TOP, top)
+            filedata_fromfile(POSRES_ITP, POSRES_ITP)
+            filedata_fromfile(STRUCT_PDB, struct)
             
-        hdf.create_group("timesteps")
+        # try to make the subsystems.
+         
         
-                    
-    
-def test_md():
-    sys = System("test.hdf")
-    
-    sys.equilibriate()
-    
+        
+        
+        try:
+            # make a fake 'System' object so we can test the subsystem factory.
+            dummysys = None
+            with tempfile.NamedTemporaryFile(suffix=".pdb") as f:  
+                # EXTREMLY IMPORTANT to flush the file, 
+                # NamedTemporaryFile returns an OPEN file, and the array writes to this file, 
+                # so we need to flush it, as this file handle remains open. Then the MDAnalysis
+                # universe opens another handle and reads its contents from it. 
+                data = src_files[STRUCT_PDB][()]
+                data.tofile(f.file)
+                f.file.flush()
+                universe = MDAnalysis.Universe(f.name)
+                dummysys = collections.namedtuple('dummysys', 'universe')(universe)
+                
+            # we have a fake sys now, can call subsys factory
+            factory = util.get_class(subsystem_factory)
+            test_ncgs, test_ss = factory(dummysys, subsystem_selects, *subsystem_args)
+            
+            print("subsystem factory appears to work, produces {} cg variables for each {} subsystems.".format(test_ncgs, len(test_ss)))
+            
+            conf[SUBSYSTEM_FACTORY] = subsystem_factory
+            conf[SUBSYSTEM_SELECTS] = subsystem_selects
+            conf[SUBSYSTEM_ARGS] = subsystem_args
+            print("{}: {}".format(SUBSYSTEM_FACTORY, subsystem_factory))
 
-if __name__ == "__main__":
-    if len(sys.argv) == 3:
-        ctest(sys.argv[1], sys.argv[2])
-    else:
-    #import subsystems
-        s=System("test.hdf")
-        s._begin_timestep()
-        s.minimize()
+        except Exception, e:
+            print("error creating subsystem_class, {}".format(e))
+            raise e
+
+        hdf.create_group("timesteps")
+        print("creation of simulation file {} complete".format(fid))
+        
+
 
 
         

@@ -128,7 +128,7 @@ class MDrunner(gromacs.run.MDrunner):
 
     
 def minimize(struct, top, posres, dirname=None, 
-             minimize_output='em.pdb', minimize_deffnm="em", mdrunner=MDrunner, **kwargs):
+             minimize_output='em.pdb', deffnm="em", mdrunner=MDrunner, **kwargs):
     """
     Energy minimize a system.
     
@@ -178,7 +178,7 @@ def minimize(struct, top, posres, dirname=None,
               falls back to :func:`~gromacs.mdrun` instead.
     """
     if dirname is None:
-        dirname = tempfile.mkdtemp()
+        dirname = tempfile.mkdtemp(prefix="tmp." + deffnm + ".")
         logging.debug("created energy minimization dir {}".format(dirname))
         
     struct = data_tofile(struct, "src.pdb", dirname=dirname)
@@ -193,12 +193,12 @@ def minimize(struct, top, posres, dirname=None,
     #   'mainselection': mainselection,
     # }
     result = gromacs.setup.energy_minimize(dirname=dirname, struct=struct, 
-                                         top=top, output=minimize_output, deffnm=minimize_deffnm, 
+                                         top=top, output=minimize_output, deffnm=deffnm, 
                                          mdrunner=mdrunner, **kwargs)
     result["dirname"] = dirname
     return MDManager(result)
     
-def setup_md(struct, top, posres, dirname=None, **kwargs):
+def setup_md(struct, top, posres, deffnm="md", dirname=None, **kwargs):
     """Set up MD with position restraints.
 
     Additional itp files should be in the same directory as the top file.
@@ -270,7 +270,7 @@ def setup_md(struct, top, posres, dirname=None, **kwargs):
     logging.info("[%(dirname)s] Setting up MD with position restraints..." % vars())
     
     if dirname is None:
-        dirname = tempfile.mkdtemp()
+        dirname = tempfile.mkdtemp(prefix="tmp." + deffnm + ".")
         logging.debug("created md dir {}".format(dirname))
         
     struct = data_tofile(struct, "src.pdb", dirname=dirname)
@@ -283,7 +283,7 @@ def setup_md(struct, top, posres, dirname=None, **kwargs):
 
     logging.debug("calling _setup_MD with kwargs: {}".format(kwargs))
     
-    setup_MD = gromacs.setup._setup_MD(dirname, struct = struct, top = top, **kwargs)
+    setup_MD = gromacs.setup._setup_MD(dirname, struct=struct, top=top, deffnm=deffnm, **kwargs)
     
     setup_MD["dirname"] = dirname
     
