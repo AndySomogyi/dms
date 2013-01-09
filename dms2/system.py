@@ -1,4 +1,10 @@
 """
+@group Units: As dms2 uses MDAnalysis, it therefore uses the MDAnalysis units which are:
+    force: kJ/(mol*A) - Note that MDA will convert forces to native units (kJ/(mol*A), even
+    though gromcas uses kJ/(mol*nm).
+    position: Angstroms,
+    velocity: Angstrom/ps - velocities are automatically converted to MDAnalysis units 
+    (i.e. from Gromacs nm/ps to Angstrom/ps in MDAnalysis)
 @group environment variables:
     DMS_DEBUG: if set to , temporary directores are NOT deleted, this might be usefull
     for debugging MD issues.
@@ -59,13 +65,12 @@ Config Dictionary Specification
         in "/src_files". This is only used as a way to store the non-coordinate
         attributes such as segment and residue info. The coordinates in this
         pdb are NOT USED to store coordinate info.
-        
-                 
+       
 """
 
 
 import logging
-logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', filename='dms.log',level=logging.DEBUG)
+logging.basicConfig(format='%(asctime)s:%(levelname)s:%(funcName)s:%(message)s', filename='dms.log',level=logging.DEBUG)
 import sys
 import os
 
@@ -75,14 +80,12 @@ from numpy import array, zeros, transpose, dot, reshape, \
                   where, pi, arctan2, sin, cos, fromfile, uint8
 import numpy.random
 import tempfile
-import MDAnalysis
+import MDAnalysis #@UnusedImport
 import dynamics
 
 import h5py #@UnresolvedImport
 import config
 import md
-import diffusion
-import subsystems
 import util
 import time
 import datetime
@@ -92,6 +95,11 @@ import collections
 # change MDAnalysis table to read carbon correctly
 import MDAnalysis.topology.tables
 MDAnalysis.topology.tables.atomelements["C0"]="C"
+
+"""
+Botlzmann's constant in kJ/mol/K
+"""
+KB = 0.0083144621
 
 
 CURRENT_TIMESTEP = "current_timestep" 
@@ -103,7 +111,6 @@ STRUCT_PDB = "struct.pdb"
 TOPOL_TOP = "topol.top"
 INDEX_NDX = "index.ndx"
 CG_STEPS = "cg_steps"
-BETA_T = "beta_t"
 MN_STEPS = "mn_steps"
 EQ_STEPS = "eq_steps"
 MD_STEPS = "md_steps"
@@ -130,6 +137,8 @@ NSTXOUT = "nstxout"
 NSTVOUT = "nstvout"
 NSTFOUT = "nstfout"
 BOX = "box"
+TEMPERATURE="temperature"
+DT = "dt"
 
 class Timestep(object):
     """
@@ -145,6 +154,7 @@ class Timestep(object):
     CG_POSITIONS = "cg_positions"
     CG_VELOCITIES = "cg_velocities"    
     CG_FORCES = "cg_forces"
+    CG_TRANSLATE = "cg_translate"
     
     def __create_property(self, name):
         def getter(self):
@@ -171,6 +181,7 @@ class Timestep(object):
         self.__create_property(Timestep.CG_POSITIONS)
         self.__create_property(Timestep.CG_VELOCITIES)
         self.__create_property(Timestep.CG_FORCES)
+        self.__create_property(Timestep.CG_TRANSLATE)
         
     @property
     def timestep(self):
@@ -271,8 +282,24 @@ class System(object):
         return self._box
     
     @property
-    def beta_t(self):
-        return float(self.config[BETA_T])
+    def temperature(self):
+        return float(self.config[TEMPERATURE])
+    
+    @property
+    def beta(self):
+        return 1/(KB*self.temperature)    
+    
+    @property
+    def mn_args(self):
+        return dict(zip(self.config[MN_ARGS + KEYS], self.config[MN_ARGS + VALUES]))
+    
+    @property
+    def eq_args(self):
+        return dict(zip(self.config[EQ_ARGS + KEYS], self.config[EQ_ARGS + VALUES]))
+    
+    @property
+    def md_args(self):
+        return dict(zip(self.config[MD_ARGS + KEYS], self.config[MD_ARGS + VALUES]))
     
     def _get_file_data(self, file_key):
         """
@@ -301,15 +328,23 @@ class System(object):
         
     def begin_timestep(self):
         """
+        Creates a new empty current_timestep. If one currently exists, it is deleted.
+        
         The _begin_timestep and _end_timestep logic are modeled after OpenGL's glBegin and glEnd. 
         the "current_timestep" link should only exist between calls 
-        to _begin_timestep and _end_timestep. The run may crash inbetween these
-        calls, in this case, we assume whatever is the contents of this timestep
-        is garbage and delete it.
+        to begin_timestep and end_timestep. 
+        
+        The simulation may crash in between these calls to begin and end timestep, in this case, 
+        there will be a partially completed current_timestep. For debugging purposes, the current_timestep
+        may be loaded back into the system via _load_timestep. Note, in this case, current_timestep is likely not 
+        complete, missing attributes will cause notifications via _load_timestep. 
+        
+        For development/debugging, there is no harm done in repeatedly calling begin_timestep, 
+        only the end_timestep actually writes the current_timestep to timesteps[n+1]
         """
         # if there is a current timestep, we assume its garbage and delete it
         if self.hdf.id.links.exists(CURRENT_TIMESTEP):
-            logging.info("found previous \"current_timestep\" key, this means that end_timestep was not called.")
+            logging.warn("found previous \"current_timestep\" key, this means that end_timestep was not called.")
             del self.hdf[CURRENT_TIMESTEP]
             
         # create a new current_timestep group, starting time now.
@@ -335,7 +370,9 @@ class System(object):
             
     def end_timestep(self):
         """
-        move current_timestep to timesteps/n
+        move current_timestep to timesteps/n+1, and flush the file.
+        
+        This is the ONLY method that actually changes the completed timesteps. 
         """
         # done with timestep, throws an exception is we do not
         # have a current timestep.
@@ -351,19 +388,38 @@ class System(object):
         
         logging.info("completed timestep {}".format(prev+1))
         
+        
     @property
     def current_timestep(self):
+        """
+        return the current_timestep.
+        The current_timestep is created by begin_timestep, and flushed to the file and deleted
+        by end_timestep. 
+        
+        The current_timestep should be treated as WRITE ONLY MEMORY!
+        All read/write state variables should be instance variables of the System class, 
+        such as univese, cg_postions, etc...
+        
+        It is very important to treat this as WRITE ONLY, reading from this var
+        will completly screw up the logic of state evolution.
+        
+        """
         return Timestep(self.hdf[CURRENT_TIMESTEP])
     
     @property
+    def dt(self):
+        return self.config[DT]
+    
+    @property
     def timesteps(self):
+        """
+        A list of Timestep objects which are the completed langevin steps.
+        """
         # get all the completed timesteps, the keys are usually out of order, so
         # have to sort them
         timesteps = [int(k) for k in self.hdf[TIMESTEPS].keys()]
         timesteps.sort()
-        
-        for ts in timesteps:
-            yield Timestep(self.hdf[TIMESTEPS + "/" + str(ts)])
+        return [Timestep(self.hdf[TIMESTEPS + "/" + str(ts)]) for ts in timesteps]
         
 
     def _create_universe(self, key = None):
@@ -423,19 +479,35 @@ class System(object):
         self.end_timestep()
         
         
-        
     def evolve(self):
+        """
+        perform a forward euler step (the most idiotic and unstable of all possible integrators)
+        to integrate the state variables. 
+        
+        reads self.cg_velocities (or possibly self.cg_forces) to calculat the diffusion matrix, 
+        averages cg_forces, calculates D*f and notifies each subsystem with it's respective part
+        of this vector to translate. 
+        
+        X[n+1] = X[n] + dt*dX/dt[n], and dX/dt is D*f.
+        """
         
         # forward euler
         # result = coordinate_ops + beta() * dt * Df
-        Df = dynamics.diffusion_force(self) * self.beta_t
+        Df = dynamics.diffusion_force(self) 
         
         # Df is a column vector, change it to a row vector, as the subsystems
         # expect a length(ncg) row vector. 
         Df = Df.transpose()
         
+        # per euler step, 
+        # translate = dt * beta * dX/dt
+        cg_translate = self.dt * self.beta * Df
+        
+        #write to ts
+        self.current_timestep.cg_translate = cg_translate
+        
         for i, s in enumerate(self.subsystems):
-            s.translate(Df[0,i*self.ncgs:i*self.ncgs+self.ncgs])
+            s.translate(cg_translate[0,i*self.ncgs:i*self.ncgs+self.ncgs])
             
         self.current_timestep.atomic_final_positions = self.universe.atoms.positions
         
@@ -453,7 +525,7 @@ class System(object):
                                posres = self.posres, \
                                nsteps=self.config[EQ_STEPS], \
                                deffnm="eq", \
-                               **dict(zip(self.config[EQ_ARGS + KEYS], self.config[EQ_ARGS + VALUES])))
+                               **self.eq_args)
     
     def setup_md(self):
         """
@@ -470,7 +542,7 @@ class System(object):
                                nsteps=self.config[MD_STEPS], \
                                multi=self.config[MULTI], \
                                deffnm="md", \
-                               **dict(zip(self.config[MD_ARGS + KEYS], self.config[MD_ARGS + VALUES])))
+                               **self.md_args)
         
     def equilibriate(self):
         with self.setup_equilibriate() as eqsetup:
@@ -491,9 +563,6 @@ class System(object):
         reads each given atomic trajectory, extracts the
         coarse grained information, updates state variables with 
         this info, and saves it to the output file.
-        
-        @precondition: univserse is intialized with a topology
-        compatible with the topologies
         
         """
         
@@ -606,7 +675,7 @@ class System(object):
                          posres = self.posres, \
                          nsteps=self.config[MN_STEPS], \
                          deffnm="mn", \
-                          **dict(zip(self.config[MN_ARGS + KEYS], self.config[MN_ARGS + VALUES]))) as mn:
+                          **self.mn_args) as mn:
 
             print(mn)
         
@@ -656,33 +725,48 @@ class System(object):
         
         os.system("vmd {} {}".format(struct, traj))
         
-    def _load_ts(self, ts):
-        # ["hdf", "config", "universe", "_box", "ncgs", "subsystems", "cg_positions", "cg_velocities", "cg_forces"]
+    def _load_timestep(self, ts):
+        """
+        Load the system - set the current timestep and the state variables to those 
+        set in a Timestep object. 
+        
+        This method is usefull for debugging / development, so the state of the system
+        can be set without performing an MD run. This way methods that change the state
+        of the System, such as evolve() can be debugged. 
+        """ 
+        
+        # check to see if the object can be used at a timestep object
+        attrs = ["cg_positions", "cg_velocities", "cg_forces", "atomic_starting_positions"]
+        ists = [hasattr(ts, attr) for attr in attrs].count(True) == len(attrs)
+        
+        if ists:      
+            try:
+                self.universe.atoms.positions[()] = ts.atomic_starting_positions
+            except:
+                print("failed to set atomic positions")
+                
+            try:
+                self.cg_positions[()] = ts.cg_positions
+            except:
+                print("failed to set cg_positions")
+                
+            try:
+                self.cg_velocities = ts.cg_velocities
+            except:
+                print("failed to set cg_velocities")
+                
+            try:
+                self.cg_forces[()] = ts.cg_forces
+            except:
+                print("failed to set cg_forces")
+            return
+        
+        # its not a timestep, so try as a integer
         try:
-            self.universe.atoms.positions[()] = ts.atomic_starting_positions
-        except:
-            print("failed to set atomic positions")
-            
-        try:
-            self.cg_positions[()] = ts.cg_positions
-        except:
-            print("failed to set cg_positions")
-            
-        try:
-            self.cg_velocities = ts.cg_velocities
-        except:
-            print("failed to set cg_velocities")
-            
-        try:
-            self.cg_forces[()] = ts.cg_forces
-        except:
-            print("failed to set cg_forces")
-        
-        
-        
-        
-        
-            
+            return self._load_timestep(self.timesteps[int(ts)])
+        except ValueError:
+            raise ValueError("Assumed timestep was an index as it did not have required attributes, but could not convert to integer")
+
             
         
 def testsys():
@@ -742,7 +826,7 @@ Au2 = {
     'struct': '/home/andy/tmp/1OMB/1OMB.pdb',
     "subsystem_selects": "not resname SOL",
     "cg_steps":5,
-    "beta_t":10.0,
+    "dt":10.0,
     "top_args": {},
     "mn_steps":5,
     "eq_steps":50,
@@ -759,7 +843,7 @@ dpc = {
     "subsystem_selects": ["resname DPC"],
     "subsystem_args":["resid unique"],
     "cg_steps":5,
-    "beta_t":10.0,
+    "dt":10.0,
     "top_args": {},
     "mn_steps":5,
     "eq_steps":50,
@@ -795,7 +879,7 @@ def create_config(fid,
                   subsystem_selects = ["not resname SOL"],
                   subsystem_args = [],
                   cg_steps = 10,
-                  beta_t  = 10.0,
+                  dt  = 10,
                   mn_steps = 500,
                   md_steps = 100,
                   multi = 1,
@@ -843,14 +927,11 @@ def create_config(fid,
             print("error reading periodic boundary conditions")
             raise e
 
-        try:
-            conf["temperature"] = float(temperature)
-        except Exception, e:
-            print("error, temperature {} must be a numeric value".format(temperature))
-            raise e
+
 
         attr(CG_STEPS, int, cg_steps)
-        attr(BETA_T, int, beta_t)
+        attr(DT, int, dt)
+        attr(TEMPERATURE, float, temperature)
         attr(MN_STEPS, int, mn_steps)
         attr(MD_STEPS, int, md_steps)
         attr(MULTI, int, multi)
