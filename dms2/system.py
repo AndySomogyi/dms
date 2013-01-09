@@ -230,7 +230,7 @@ class System(object):
         logging.info("creating subsystems")
         factory = util.get_class(self.config[SUBSYSTEM_FACTORY])
         self.ncgs, self.subsystems = factory(self, self.config[SUBSYSTEM_SELECTS], *self.config[SUBSYSTEM_ARGS])
-        logging.debug("using {} subsystems and {} coarse grained vars".format(self.subsystems, self.ncgs))
+        logging.debug("using {} cg variables for each {} subsystems".format(self.ncgs, len(self.subsystems)))
         
         # notify subsystems, we have a new universe
         [s.universe_changed(self.universe) for s in self.subsystems]
@@ -390,8 +390,6 @@ class System(object):
                 u = MDAnalysis.Universe(f.name)
                 return u
                 
-
-        
     def run(self):
         last = self.__last_timestep()
         start = last.timestep + 1 if last else 0
