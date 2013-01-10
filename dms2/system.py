@@ -408,7 +408,7 @@ class System(object):
     
     @property
     def dt(self):
-        return self.config[DT]
+        return float(self.config[DT])
     
     @property
     def timesteps(self):
@@ -843,11 +843,11 @@ dpc = {
     "subsystem_selects": ["resname DPC"],
     "subsystem_args":["resid unique"],
     "cg_steps":5,
-    "dt":10.0,
+    "dt":0.1,
     "top_args": {},
     "mn_steps":5,
     "eq_steps":50,
-    "md_steps":50,
+    "md_steps":1000,
     "multi":4,
     "solvate":False,
     } 
@@ -879,7 +879,7 @@ def create_config(fid,
                   subsystem_selects = ["not resname SOL"],
                   subsystem_args = [],
                   cg_steps = 10,
-                  dt  = 10,
+                  dt  = 0.1,
                   mn_steps = 500,
                   md_steps = 100,
                   multi = 1,
@@ -930,7 +930,7 @@ def create_config(fid,
 
 
         attr(CG_STEPS, int, cg_steps)
-        attr(DT, int, dt)
+        attr(DT, float, dt)
         attr(TEMPERATURE, float, temperature)
         attr(MN_STEPS, int, mn_steps)
         attr(MD_STEPS, int, md_steps)

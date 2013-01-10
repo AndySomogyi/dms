@@ -42,9 +42,7 @@ elif len(sys.argv) == 2:
         os.environ["DMS_DEBUG"] = "TRUE"
         s._load_ts(s.current_timestep)
         s.evolve()
-        
-    else:
-    
+    elif sys.argv[1] == "run":
         s.run()
     
 
