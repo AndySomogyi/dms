@@ -4,6 +4,7 @@ Created on Oct 11, 2012
 @author: andy
 '''
 from pkg_resources import resource_filename, resource_listdir  #@UnresolvedImport
+import os
 
 def _generate_template_dict(dirname):
     """
@@ -27,6 +28,12 @@ def resource_basename(resource):
 
 templates = _generate_template_dict('templates')
 """
+A dictionary of pre-made templates. 
+ 
+TODO, this should be cleaned up: if a user specifies a mdp template, then that template
+should be stored in the hdf file. The current approach violates the principle that the 
+entire config is in the hdf.
+    
 *dms* comes with a number of templates for run input files
 and queuing system scripts. They are provided as a convenience and
 examples but **WITHOUT ANY GUARANTEE FOR CORRECTNESS OR SUITABILITY FOR
@@ -58,6 +65,5 @@ See :mod:`gromacs.qsub` for the format and how these files are processed.
 """
 
 
-def test():
-    print(templates)
+    
     

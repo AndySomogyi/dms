@@ -96,6 +96,9 @@ def test(dirname):
 
 
 
+
+
+
 class MDrunner(gromacs.run.MDrunner):
     """Manage running :program:`mdrun` as mpich2_ multiprocessor job with the SMPD mechanism.
 
@@ -128,7 +131,8 @@ class MDrunner(gromacs.run.MDrunner):
 
     
 def minimize(struct, top, posres, dirname=None, 
-             minimize_output='em.pdb', deffnm="em", mdrunner=MDrunner, **kwargs):
+             minimize_output="em.pdb", deffnm="em", mdrunner=MDrunner, 
+             mdp="em.mdp", **kwargs):
     """
     Energy minimize a system.
     
@@ -185,7 +189,9 @@ def minimize(struct, top, posres, dirname=None,
     top = data_tofile(top, "src.top", dirname=dirname)
     posres = data_tofile(posres, "posres.itp", dirname=dirname)
     
-    kwargs.setdefault('mdp',config.templates['em.mdp'])
+    
+    logging.info("using mdp template {} from key {}".format(config.templates[mdp], mdp))
+    mdp = config.templates[mdp]
     
     # gromacs.setup.energy_minimize returns
     # { 'struct': final_struct,
@@ -194,12 +200,12 @@ def minimize(struct, top, posres, dirname=None,
     # }
     result = gromacs.setup.energy_minimize(dirname=dirname, struct=struct, 
                                          top=top, output=minimize_output, deffnm=deffnm, 
-                                         mdrunner=mdrunner, **kwargs)
+                                         mdp=mdp, mdrunner=mdrunner, **kwargs)
     result["dirname"] = dirname
     return MDManager(result)
     
-def setup_md(struct, top, posres, deffnm="md", dirname=None, **kwargs):
-    """Set up MD with position restraints.
+def setup_md(struct, top, posres, deffnm="md", dirname=None, mdp="md_CHARMM27.mdp", **kwargs):
+    """Set up Gromacs MD run..
 
     Additional itp files should be in the same directory as the top file.
 
@@ -279,11 +285,12 @@ def setup_md(struct, top, posres, deffnm="md", dirname=None, **kwargs):
     
     kwargs.setdefault('qname', None)
 
-    kwargs.setdefault('mdp',config.templates['md_CHARMM27.mdp'])
+    logging.info("using mdp template {} from key {}".format(config.templates[mdp], mdp))
+    mdp = config.templates[mdp]
 
     logging.debug("calling _setup_MD with kwargs: {}".format(kwargs))
     
-    setup_MD = gromacs.setup._setup_MD(dirname, struct=struct, top=top, deffnm=deffnm, **kwargs)
+    setup_MD = gromacs.setup._setup_MD(dirname, struct=struct, top=top, deffnm=deffnm, mdp=mdp, **kwargs)
     
     setup_MD["dirname"] = dirname
     

@@ -838,15 +838,15 @@ def ctest(pdb, hdf):
     Au2['struct'] = pdb
     create_config(fid=hdf, **Au2)
     
+DEFAULT_MN_ARGS = {"mdp":"em.mdp"}
 
-
-DEFAULT_MD_ARGS = { "mdp":config.templates["md_CHARMM27.mdp"],  # the default mdp template \
+DEFAULT_MD_ARGS = { "mdp":"md_CHARMM27.mdp",  # the default mdp template 
                     "nstxout": 10,    # trr pos
                     "nstvout": 10,    # trr veloc
                     "nstfout": 10,    # trr forces
                     }
 
-DEFAULT_EQ_ARGS = { "mdp":config.templates["md_CHARMM27.mdp"],  # the default mdp template 
+DEFAULT_EQ_ARGS = { "mdp":"md_CHARMM27.mdp",  # the default mdp template 
                     "define":"-DPOSRES" # do position restrained md for equilibriation
                     }
 
@@ -865,7 +865,7 @@ def create_config(fid,
                   md_steps = 100,
                   multi = 1,
                   eq_steps = 10,
-                  mn_args = {},
+                  mn_args = DEFAULT_MN_ARGS,
                   eq_args = DEFAULT_EQ_ARGS,
                   md_args = DEFAULT_MD_ARGS,
                   solvate = False,
