@@ -219,7 +219,7 @@ class System(object):
     __slots__ = ["hdf", "config", "universe", "_box", "ncgs", "subsystems", "cg_positions", "cg_velocities", "cg_forces"]
     
     def __init__(self, fid):      
-        
+        logging.info("creating System, fid={}".format(fid))
         self.hdf = h5py.File(fid)
         self.config = self.hdf[CONFIG].attrs
         self._box = self.config[BOX]
@@ -351,17 +351,21 @@ class System(object):
         current_group = self.hdf.create_group(CURRENT_TIMESTEP)
         self.current_timestep.timestep_begin = time.time()
             
-        last = self.__last_timestep()             
+        last = self.__last_timestep()
+        timestep_number = 0
         if last:
             # link the starting positions to the previous timesteps final positions
             current_group.id.links.create_soft(Timestep.ATOMIC_STARTING_POSITIONS, 
                                       last._group.name + "/" + Timestep.ATOMIC_FINAL_POSITIONS)
             src_files = last._group
+            timestep_number = last.timestep + 1
         else:
             # this is the first timestep, so set start positions to the starting
             # universe struct.
             current_group[Timestep.ATOMIC_STARTING_POSITIONS] = self.universe.atoms.positions
             src_files = self.hdf[SRC_FILES]
+
+        logging.info("starting timestep {}".format(timestep_number))
         
         # link file data into current     
         for f in FILE_DATA_LIST:
@@ -476,8 +480,6 @@ class System(object):
         """
         self.begin_timestep()
         
-        # md - runs md with current state, reads in md output and populates 
-        # segments statistics. 
         self.minimize()
         
         self.equilibriate()
@@ -544,7 +546,7 @@ class System(object):
         @return an MDManager object loaded with the trr to run an equilibriation.
         """
 
-        logging.info("setting up equilibriation...")
+        logging.info("setting up md...")
         
         return md.setup_md(struct=self.universe, \
                                top=self.top, \
@@ -600,7 +602,7 @@ class System(object):
         this info, and saves it to the output file.
         
         """
-        
+        logging.info("processing trajectories")
         # zero the state variables (for this frame)
         self.cg_positions[:] = 0.0
         self.cg_forces[:] = 0.0

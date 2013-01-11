@@ -1,7 +1,11 @@
+
 '''
+
 Created on Dec 30, 2012
 
 @author: andy
+
+
 '''
 
 import system
@@ -18,27 +22,27 @@ dpc100 = {
     "subsystem_selects": ["resname DPC"],
     "subsystem_args":["resid unique"],
     "cg_steps":5,
-    "dt":0.1,
-    "mn_steps":50,
-    "eq_steps":50,
-    "md_steps":1000,
-    "multi":4,
+    "dt":100,
+    "mn_steps":5000,
+    "eq_steps":500,
+    "md_steps":2000,
+    "multi":10,
     "solvate":False,
     }
 
 dpc60 = { 
     'box' : [75.0, 75.0, 75.0],      
-    'temperature' : 300.0, 
+    'temperature' : 285.0, 
     'struct': 'dpc60.sol.pdb',
     'top' :  'dpc60.top',
     "subsystem_selects": ["resname DPC"],
     "subsystem_args":["resid unique"],
-    "cg_steps":5,
-    "dt":0.1,
-    "mn_steps":50,
-    "eq_steps":50,
-    "md_steps":50,
-    "multi":4,
+    "cg_steps":100,
+    "dt":100,
+    "mn_steps":5000,
+    "eq_steps":500,
+    "md_steps":2000,
+    "multi":10,
     "solvate":False,
     }
 
