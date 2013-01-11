@@ -10,12 +10,55 @@ import sys
 import tempfile
 import os
 
+dpc100 = { 
+    'box' : [65.0, 65.0, 65.0],      
+    'temperature' : 300.0, 
+    'struct': 'dpc100.sol.pdb',
+    'top' :  'dpc100.top',
+    "subsystem_selects": ["resname DPC"],
+    "subsystem_args":["resid unique"],
+    "cg_steps":5,
+    "dt":0.1,
+    "top_args": {},
+    "mn_steps":50,
+    "eq_steps":50,
+    "md_steps":1000,
+    "multi":4,
+    "solvate":False,
+    }
 
-if len(sys.argv) == 3:
-    if sys.argv[1] == "dpc":
-        system.dpctest(sys.argv[2])
-    else:
-        system.ctest(sys.argv[1], sys.argv[2])
+dpc60 = { 
+    'box' : [75.0, 75.0, 75.0],      
+    'temperature' : 300.0, 
+    'struct': 'dpc60.sol.pdb',
+    'top' :  'dpc60.top',
+    "subsystem_selects": ["resname DPC"],
+    "subsystem_args":["resid unique"],
+    "cg_steps":5,
+    "dt":0.1,
+    "top_args": {},
+    "mn_steps":50,
+    "eq_steps":50,
+    "md_steps":1000,
+    "multi":4,
+    "solvate":False,
+    }
+
+
+test_structs = {"dpc100":dpc100, "dpc60":dpc60}
+
+
+if len(sys.argv) == 4 and sys.argv[1] == "config":
+    print("making config...")
+    conf = None
+    try:
+        conf = test_structs[sys.argv[2]]
+    except KeyError:
+        print("config {} not found in existing config".format(sys.argv[2]))
+        sys.exit()
+    system.create_config(fid=sys.argv[3], **conf)
+    
+
 elif len(sys.argv) == 2:
     tempfile.tempdir = os.path.curdir
     s = system.System('test.hdf')

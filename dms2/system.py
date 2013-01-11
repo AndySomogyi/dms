@@ -832,29 +832,13 @@ Au2 = {
     "solvate":False,
     } 
 
-dpc = { 
-    'box' : [90.0, 90.0, 90.0],      
-    'temperature' : 300.0, 
-    'struct': 'DPC-Self-CHARMM36.pdb',
-    'top' :  '54_DPC_CHARMM36_h2o.top',
-    "subsystem_selects": ["resname DPC"],
-    "subsystem_args":["resid unique"],
-    "cg_steps":5,
-    "dt":0.1,
-    "top_args": {},
-    "mn_steps":5,
-    "eq_steps":50,
-    "md_steps":1000,
-    "multi":4,
-    "solvate":False,
-    } 
+ 
     
 def ctest(pdb, hdf):
     Au2['struct'] = pdb
     create_config(fid=hdf, **Au2)
     
-def dpctest(hdf):
-    create_config(fid=hdf, **dpc)
+
 
 DEFAULT_MD_ARGS = { "mdp":config.templates["md_CHARMM27.mdp"],  # the default mdp template \
                     "nstxout": 10,    # trr pos
