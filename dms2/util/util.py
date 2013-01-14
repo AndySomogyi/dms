@@ -12,8 +12,22 @@ import h5py #@UnresolvedImport
 import gromacs.utilities as utilities
 import os.path  
 import shutil
-import numpy
+import numpy as n
 import MDAnalysis.core
+
+def fix_periodic_boundary_conditions(u):
+    box = u.trajectory.ts.dimensions[:3]
+    
+    # scaled positions, positions is natom * 3, box should be 3 vector.
+    # arctan2 has a range of (-pi, pi], so have to shift positions to 
+    # zero centered instead of box / 2 centered.
+    spos = u.atoms.positions / box * 2.0 * n.pi - n.pi
+        
+    # get the x and y components, mass scale them, and add in cartesian space
+    # shift back to box / 2 centered
+    return (n.arctan2(n.sin(spos), n.cos(spos)) + n.pi) * box / 2.0 / n.pi
+        
+
 
 def data_tofile(data, fid, sep="", fmt="%s", dirname="."):
     """
