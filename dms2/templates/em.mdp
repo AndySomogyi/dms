@@ -11,7 +11,7 @@
 
 cpp            = cpp
 include        = -I. -I.. -I../top
-define         = -DPOSRES -DFLEXSPC
+define         = -DFLEXSPC
 
 integrator     = steep
 emtol          = 500

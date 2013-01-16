@@ -8,12 +8,14 @@ dms2 io module
 functions for reading and writng files to / from disk and hdf blobs.
 """
 
-import h5py #@UnresolvedImport
+import h5py                                 #@UnresolvedImport
 import gromacs.utilities as utilities
 import os.path  
 import shutil
 import numpy as n
-import MDAnalysis.core
+
+import MDAnalysis                           #@UnresolvedImport
+import MDAnalysis.core                      #@UnresolvedImport
 
 def fix_periodic_boundary_conditions(u):
     box = u.trajectory.ts.dimensions[:3]
@@ -26,9 +28,22 @@ def fix_periodic_boundary_conditions(u):
     # get the x and y components, mass scale them, and add in cartesian space
     # shift back to box / 2 centered
     return (n.arctan2(n.sin(spos), n.cos(spos)) + n.pi) * box / 2.0 / n.pi
-        
 
-
+def stripped_positions(fname, sub):
+    """
+    extremly hackish function.
+    
+    Currently, only TRRReader supports the sub argument.
+    
+    Read a pdb, and return the coordinates using sub as an indexing array. 
+    
+    Really should go into MDAnalysis.PDBReader, but in the intrests of time, here
+    it is. 
+    
+    TODO: someone eventually move this logic to PrimitivePDBReader and PDBReader.
+    """
+    return MDAnalysis.Universe(fname).atoms.positions[sub]
+    
 def data_tofile(data, fid, sep="", fmt="%s", dirname="."):
     """
     @param fid : file or str    
@@ -54,7 +69,7 @@ def data_tofile(data, fid, sep="", fmt="%s", dirname="."):
             with utilities.in_dir(dirname):
                 if type(data) is h5py.Dataset:
                     data = data[()]
-                if type(data) is numpy.ndarray:  
+                if type(data) is n.ndarray:  
                     data.tofile(fid,sep,fmt)
                 elif isinstance(data, MDAnalysis.core.AtomGroup.AtomGroup) or isinstance(data, MDAnalysis.core.AtomGroup.Universe):
                     print("pwd", os.path.curdir)

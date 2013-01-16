@@ -74,16 +74,14 @@ logging.basicConfig(format='%(asctime)s:%(levelname)s:%(funcName)s:%(message)s',
 import sys
 import os
 
-from numpy import array, zeros, transpose, dot, reshape, \
-                  average, arange, sqrt, linalg, conjugate, \
-                  real, correlate, newaxis, sum, mean, min, max, \
-                  where, pi, arctan2, sin, cos, fromfile, uint8
+from numpy import array, zeros, reshape, conjugate, \
+                  real, max, fromfile, uint8
 import numpy.random
 import tempfile
-import MDAnalysis #@UnusedImport
+import MDAnalysis                       #@UnresolvedImport
 import dynamics
 
-import h5py #@UnresolvedImport
+import h5py                             #@UnresolvedImport
 import config
 import md
 import util
@@ -91,9 +89,8 @@ import time
 import datetime
 import collections
 
-
 # change MDAnalysis table to read carbon correctly
-import MDAnalysis.topology.tables
+import MDAnalysis.topology.tables       #@UnresolvedImport
 MDAnalysis.topology.tables.atomelements["C0"]="C"
 
 """
@@ -128,7 +125,7 @@ MD_ARGS = "md_args"
 KEYS="_keys"
 VALUES="_values"
 MULTI= "multi"
-SOLVATE="solvate"
+SHOULD_SOLVATE="should_solvate"
 POSRES_ITP="posres.itp"
 SUBSYSTEM_FACTORY = "subsystem_factory"
 SUBSYSTEM_SELECTS = "subsystem_selects"
@@ -297,6 +294,11 @@ class System(object):
     @property
     def md_args(self):
         return dict(zip(self.config[MD_ARGS + KEYS], self.config[MD_ARGS + VALUES]))
+    
+    @property 
+    def should_solvate(self):
+        return bool(self.config[SHOULD_SOLVATE])
+    
     
     def _get_file_data(self, file_key):
         """
@@ -480,11 +482,18 @@ class System(object):
         """
         self.begin_timestep()
         
+        # first minimize in vacuum, in either case, 
+        # fixes problems with langevin bond deformation.
         self.minimize()
         
-        self.equilibriate()
-        
-        self.md()
+        if self.should_solvate:
+            with self.solvate() as sol:
+                with self.minimize(**sol) as mn:
+                    with self.equilibriate(**mn) as eq:
+                        self.md(**eq)
+        else:
+            self.equilibriate()
+            self.md()
         
         self.evolve()
         
@@ -523,40 +532,49 @@ class System(object):
             
         self.current_timestep.atomic_final_positions = self.universe.atoms.positions
         
-    def setup_equilibriate(self):
+    def setup_equilibriate(self, struct=None, top=None):
         """
         setup an equilibriation md run using the contents of the universe, but do not actually run it.
 
         @return an MDManager object loaded with the trr to run an equilibriation.
         """
-
-        logging.info("setting up equilibriation...")
         
-        return md.setup_md(struct=self.universe, \
-                               top=self.top, \
+        if struct is None or top is None:
+            struct = self.universe
+            top = self.top
+            logging.info("setting up equilibriation for self.universe")
+        else:
+            logging.info("setting up equilibriation for solvated struct, top")
+        
+        return md.setup_md(struct=struct, \
+                               top=top, \
                                posres = self.posres, \
                                nsteps=self.config[EQ_STEPS], \
                                deffnm="eq", \
                                **self.eq_args)
     
-    def setup_md(self):
+    def setup_md(self, struct=None, top=None):
         """
         setup an equilibriation md run using the contents of the universe, but do not actually run it.
 
         @return an MDManager object loaded with the trr to run an equilibriation.
         """
-
-        logging.info("setting up md...")
+        if struct is None or top is None:
+            struct = self.universe
+            top = self.top
+            logging.info("setting up md for self.universe")
+        else:
+            logging.info("setting up md for solvated struct, top")
         
-        return md.setup_md(struct=self.universe, \
-                               top=self.top, \
+        return md.setup_md(struct=struct, \
+                               top=top, \
                                posres = self.posres, \
                                nsteps=self.config[MD_STEPS], \
                                multi=self.config[MULTI], \
                                deffnm="md", \
                                **self.md_args)
         
-    def equilibriate(self):
+    def equilibriate(self, struct=None, top=None, sub=None, **args):
         """
         Equilibriates (thermalizes) the structure stored in self.universe.
         
@@ -573,15 +591,26 @@ class System(object):
             subsystems are notified.
             equililibriated state is written to current_timestep. 
         """
-        logging.info("performing equilibriation")
-        with self.setup_equilibriate() as eqsetup:
-            mdres = md.run_md(eqsetup.dirname, **eqsetup)
-            self.universe.load_new(mdres.structs[0])
+        result = None
         
-        self.current_timestep.atomic_equilibriated_positions = self.universe.atoms.positions
+        if struct is None or top is None:
+            logging.info("performing equilibriation for self.universe")
+            with self.setup_equilibriate() as eqsetup:
+                mdres = md.run_md(eqsetup.dirname, **eqsetup)
+                self.universe.load_new(mdres.structs[0])
+        else:
+            logging.info("performing equilibriation for solvated struct, top")
+            result = self.setup_equilibriate(struct, top)
+            mdres = md.run_md(result.dirname, **result)
+            result["struct"] = mdres.structs[0]
+            result["sub"] = sub
+            self.universe.atoms.positions[:] = util.stripped_positions(mdres.structs[0], sub)
+            
+        self.current_timestep.atomic_equilibriated_positions = self.universe.atoms.positions   
         [s.equilibriated() for s in self.subsystems]
+        return result
         
-    def md(self):
+    def md(self, struct=None, top=None, sub=None, **args):
         """
         Perform a set of molecular dynamics runs using the atomic state 
         of self.universe as the starting structure. The state of self.universe
@@ -591,11 +620,13 @@ class System(object):
         @postcondition: self.cg_positions, self.cg_forces, self.cg_velocities[:] 
             are populated with statistics collected from the md runs.
         """
-        with self.setup_md() as mdsetup:
-            mdres = md.run_md(mdsetup.dirname, **mdsetup)            
-            self._processes_trajectories(mdres.trajectories)
         
-    def _processes_trajectories(self, trajectories):
+        
+        with self.setup_md(struct, top) as mdsetup:
+            mdres = md.run_md(mdsetup.dirname, **mdsetup)            
+            self._processes_trajectories(mdres.trajectories, sub)
+        
+    def _processes_trajectories(self, trajectories, sub=None):
         """
         reads each given atomic trajectory, extracts the
         coarse grained information, updates state variables with 
@@ -619,7 +650,7 @@ class System(object):
             # universe is saved, process trajectories
             for fi, f in enumerate(trajectories):
                 print(f)
-                self.universe.load_new(f)
+                self.universe.load_new(f, sub=sub)
                 for tsi, _ in enumerate(self.universe.trajectory):
                     if tsi < self.cg_velocities.shape[2]:
                         for si, s in enumerate(self.subsystems):
@@ -652,36 +683,70 @@ class System(object):
     
     def solvate(self):
         """
-        Not implemented yet.
+        Solvate the current structure (self.universe)
+        
+        Neither the universe, nor the contents of the universe are harmed by this operation.
+        
+        @return: A MDManager context manager which contains the solvated structure and
+            topology files, as well as a 'sub' index which will be used to later
+            pick out the original unsolvated atoms.
         """
-        pass
+        return md.solvate(self.universe, self.top)
         
-    def minimize(self):
+    def minimize(self, struct = None, top = None, sub = None, **args):
         """
-        Take the current structure (in self.universe) and minimize it via md.
+        Take the a starting structure and minimize it via md.
         
-        Loads the self.universe with the minimized structure and notifies all the 
-        subsystems.
+        The starting structure defaults to self.universe and self.top. If the optional
+        arguments, struct and top are given, these are then the starting structure. 
+        The optional args are a way to minimize a solvated structure. 
         
-        @precondition: 
-        self.universe contains the current atomic state
+        If struct and top are give, then sub MUST be the indices of the original (self.universe)
+        atoms in the solvated structure. 
+        
+        In either case, self.universe is loaded with with the minimized structure and 
+        subsystems are notified. 
         
         @postcondition: 
         self.universe is loaded with the minimized structure
         all subsystems are notified.
-        """
-        logging.info("Performing minimization")
-        with md.minimize(struct=self.universe, \
-                         top=self.top, \
-                         posres = self.posres, \
-                         nsteps=self.config[MN_STEPS], \
-                         deffnm="mn", \
-                          **self.mn_args) as mn:
         
-            self.universe.load_new(mn["struct"])
+        @return: None if we are using self.universe / self.top, otherwise, if we
+            are given a solvated structure, then a MDManager context manager loaded
+            with the minimized solvated structure / top is returned. 
+        """
+        
+        result = None
+        
+        if struct is None or top is None:
+            logging.info("performing minimization with self.universe and self.top")
+            with md.minimize(struct=self.struct, \
+                                 top=self.top, \
+                                 posres = self.posres, \
+                                 nsteps=self.config[MN_STEPS], \
+                                 deffnm="mn", \
+                                 **self.mn_args) as mn:
+                
+                self.universe.load_new(mn["struct"])
+        else:
+            if sub is None or len(sub) != len(self.universe.atoms):
+                raise ValueError("sub is either None or is not the correct length")
+            logging.info("performing minimization with solvated structure")
+            result = md.minimize(struct=struct, \
+                                     top=top, \
+                                     posres = self.posres, \
+                                     nsteps=self.config[MN_STEPS], \
+                                     deffnm="mn", \
+                                     **self.mn_args)
+            result["sub"] = sub
+            self.universe.atoms.positions[:] = util.stripped_positions(result["struct"], sub)
             
+        # done with external md
         self.current_timestep.atomic_minimized_positions = self.universe.atoms.positions
         [s.minimized() for s in self.subsystems]
+        logging.info("minimization complete")
+        
+        return result
         
         
     def tofile(self,traj):
@@ -870,7 +935,7 @@ def create_config(fid,
                   mn_args = DEFAULT_MN_ARGS,
                   eq_args = DEFAULT_EQ_ARGS,
                   md_args = DEFAULT_MD_ARGS,
-                  solvate = False,
+                  should_solvate = False,
                   ndx=None,
                   **kwargs):
     
@@ -919,7 +984,7 @@ def create_config(fid,
         attr(MD_STEPS, int, md_steps)
         attr(MULTI, int, multi)
         attr(EQ_STEPS, int, eq_steps)
-        attr(SOLVATE, int, solvate)
+        attr(SHOULD_SOLVATE, int, should_solvate)
 
         attr(MN_ARGS, dict, mn_args)
         attr(EQ_ARGS, dict, eq_args)
@@ -952,19 +1017,20 @@ def create_config(fid,
                 filedata_fromfile(TOPOL_TOP, top["top"])
                 filedata_fromfile(POSRES_ITP, top["posres"])
                 filedata_fromfile(STRUCT_PDB, top["struct"])
-
-                if solvate:
+                
+                # check to see if solvation is possible
+                if should_solvate:
                     # convert Angstrom to Nm, GROMACS works in Nm, and
                     # we use MDAnalysis which uses Angstroms
-                    with md.solvate(box=box/10.0, **top) as sol:
+                    print("attempting auto solvation...")
+                    with md.solvate(box=box/10.0, **top):
                         # solvate returns 
                         # {'ndx': '/home/andy/tmp/Au/solvate/main.ndx', 
                         # 'mainselection': '"Protein"', 
                         # 'struct': '/home/andy/tmp/Au/solvate/solvated.pdb', 
                         # 'qtot': 0})
-                        filedata_fromfile(INDEX_NDX, sol["ndx"])
-                        filedata_fromfile(STRUCT_PDB, sol["struct"])
-                        filedata_fromfile(TOPOL_TOP, sol["top"])
+                        print("auto solvation successfull")
+
         else:
             # use user specified top
             print("using user specified topology file {}".format(top))
@@ -973,11 +1039,20 @@ def create_config(fid,
             filedata_fromfile(POSRES_ITP, POSRES_ITP)
             filedata_fromfile(STRUCT_PDB, struct)
             
+            # check to see if solvation is possible
+            if should_solvate:
+                # convert Angstrom to Nm, GROMACS works in Nm, and
+                # we use MDAnalysis which uses Angstroms
+                print("attempting auto solvation...")
+                with md.solvate(struct=struct, top=top, box=box/10.0):
+                    # solvate returns 
+                    # {'ndx': '/home/andy/tmp/Au/solvate/main.ndx', 
+                    # 'mainselection': '"Protein"', 
+                    # 'struct': '/home/andy/tmp/Au/solvate/solvated.pdb', 
+                    # 'qtot': 0})
+                    print("auto solvation successfull")
+            
         # try to make the subsystems.
-         
-        
-        
-        
         try:
             # make a fake 'System' object so we can test the subsystem factory.
             dummysys = None

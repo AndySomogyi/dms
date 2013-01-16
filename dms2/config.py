@@ -1,10 +1,22 @@
-'''
+"""
 Created on Oct 11, 2012
 
 @author: andy
-'''
+
+Handles configuration of dms environment variables and templates.
+
+All dms relevant environment variables can be accessed as config.DMS_???, 
+for example, to check if debug is on, one would check config.DMS_DEBUG
+
+Currently used dms enviornment variables and their default values are:
+
+DMS_DEBUG : False
+DMS_TMPDIR : "."
+
+"""
 from pkg_resources import resource_filename, resource_listdir  #@UnresolvedImport
 import os
+
 
 def _generate_template_dict(dirname):
     """
@@ -63,6 +75,13 @@ The queing system scripts are highly specific and you will need to add your
 own into :data:`gromacs.config.qscriptdir`.
 See :mod:`gromacs.qsub` for the format and how these files are processed.
 """
+
+
+
+
+
+# Initialized the dms enviornment variables
+DMS_TMPDIR = "."
 
 
     

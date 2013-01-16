@@ -15,9 +15,11 @@ import shutil
 import logging
 import re
 import subprocess
-import MDAnalysis
+import MDAnalysis       #@UnresolvedImport
+import MDAnalysis.core  #@UnresolvedImport
 import gromacs.setup
 import gromacs.run
+import gromacs.utilities
 import config
 from collections import namedtuple
 from os import path
@@ -25,44 +27,32 @@ from util import data_tofile, is_env_set
 import shutil
 import tempfile
 import glob
+import numpy
 
-from collections import Mapping, Hashable 
+#from collections import Mapping, Hashable 
 
 
-class MDManager(Mapping, Hashable): 
-    __slots__ = ("__dict", "dirname")
+class MDManager(dict): 
+    # __slots__ = ("__dict", "dirname")
 
     def __init__(self, *args, **kwargs): 
         print("__init__")
-        self.__dict = dict(*args, **kwargs)
-        print(self.__dict) 
+        super(MDManager,self).__init__(*args, **kwargs)
         
-        if not self.__dict.has_key("dirname"):
+        if not self.has_key("dirname"):
             raise ValueError("MDManager arguments must contain a \"dirname\" key")
         
-        self.dirname = self.__dict["dirname"]
-        del self.__dict["dirname"]
+        self.dirname = self["dirname"]
+        del self["dirname"]
         
         if not os.path.isdir(self.dirname):
             raise IOError("dirname of {} is not a directory".format(self.dirname))
         
         # save the abs path, user could very likely change directories.
         self.dirname = os.path.abspath(self.dirname)
-
-    def __len__(self): 
-        return len(self.__dict) 
-
-    def __iter__(self): 
-        return iter(self.__dict) 
-
-    def __getitem__(self, key): 
-        return self.__dict[key] 
-
-    def __hash__(self): 
-        return hash(frozenset(self.__dict.iteritems())) 
-
-    def __repr__(self): 
-        return "MDManager({})".format(self.__dict) 
+        
+    def __repr__(self):
+        return "MDManager(dirname={}, dict={})".format(self.dirname, super(MDManager,self).__repr__())
     
     def __enter__(self):
         print("__enter__")
@@ -95,10 +85,6 @@ def test(dirname):
     return MDManager({'dirname':dirname})
 
 
-
-
-
-
 class MDrunner(gromacs.run.MDrunner):
     """Manage running :program:`mdrun` as mpich2_ multiprocessor job with the SMPD mechanism.
 
@@ -126,9 +112,6 @@ class MDrunner(gromacs.run.MDrunner):
             logging.debug("determined nprocs is {} fron os.sysconf".format(nprocs))
             return ["mpiexec", "-n", str(nprocs)]
  
-    
-
-
     
 def minimize(struct, top, posres, dirname=None, 
              minimize_output="em.pdb", deffnm="em", mdrunner=MDrunner, 
@@ -320,11 +303,11 @@ def topology(struct, protein="protein", top=None, dirname="top", posres=None, ff
     return MDManager(result)
         
     
-def solvate(struct, top, box,
+def solvate(struct, top, box = None,
             concentration=0, cation='NA', anion='CL',
             water='spc', solvent_name='SOL', with_membrane=False,
             ndx = 'main.ndx', mainselection = '"Protein"',
-            dirname='solvate',
+            dirname=None, deffnm='sol',
             **kwargs):
     """Put protein into box, add water, add counter-ions.
 
@@ -342,8 +325,9 @@ def solvate(struct, top, box,
        box.
 
     :Arguments:
-      *struct* : filename
-          pdb or gro input structure
+      *struct* : MDAnalysis universe, AtomGroup or data buffer. This is the starting
+          dry, unsolvated structure. 
+         
       *top* : filename
           Gromacs topology
       *distance* : float
@@ -359,10 +343,9 @@ def solvate(struct, top, box,
 
           If set to ``None`` it will ignore *distance* and use the box
           inside the *struct* file.
-      *box*
-          List of three box lengths [A,B,C] that are used by :class:`~gromacs.tools.Editconf`
-          in combination with *boxtype* (``bt`` in :program:`editconf`) and *angles*.
-          Setting *box* overrides *distance*.
+      *box* : If the struct is an MDAnalysis obj, the box is obtained from the
+          MDAnalysis trajectory. 
+          .
       *angles*
           List of three angles (only necessary for triclinic boxes).
       *concentration* : float
@@ -398,8 +381,36 @@ def solvate(struct, top, box,
           changed in the mdp file.
 
     """
+    
+    if dirname is None:
+        dirname = tempfile.mkdtemp(prefix="tmp." + deffnm + ".")
+        logging.debug("created solvation dir {}".format(dirname))
+    
+    # The box, a list of three box lengths [A,B,C] that are used by :class:`~gromacs.tools.Editconf`
+    # in combination with *boxtype* (``bt`` in :program:`editconf`) and *angles*.
+    if box is None and isinstance(struct, MDAnalysis.core.AtomGroup.Universe):
+        # convert to nm
+        box = struct.trajectory.ts.dimensions[:3] / 10.0 
+    
+    # build the substitution index.
+    # TODO: Verify that solvate only adds atoms after the dry structure
+    # current logic, to be verified, is that the sub index (the original atom indices)
+    # are the first n atoms in the resulting n + nsol solvated structure. 
+    # The sub indices are used to pick out the original strucure out of
+    # the n + nsol atom trr trajectory files.      
+    sub = None
+        
+    if isinstance(struct, MDAnalysis.core.AtomGroup.Universe):
+        sub = numpy.arange(len(struct.atoms))
+    
     struct = data_tofile(struct, "src.pdb", dirname=dirname)
+    
+    if sub is None:
+        u = MDAnalysis.Universe(struct)
+        sub = numpy.arange(len(u.atoms))
+        
     top = data_tofile(top, "src.top", dirname=dirname)
+    
     result = gromacs.setup.solvate(struct, top,
             1.0, "cubic", 
             concentration, cation, anion,
@@ -408,15 +419,19 @@ def solvate(struct, top, box,
             dirname, box="{} {} {}".format(*box))
     result["dirname"] = dirname
     result["top"] = top
+    result["sub"] = sub 
     
     return MDManager(result)
     
     
-def run_md(dirname, md_runner=MDrunner, **kwargs):
+def run_md(dirname, sub=None, md_runner=MDrunner, **kwargs):
     """
     actually perform the md run.
     
     does not alter class state, only the file system is changed
+    
+    @param sub: Path to an index (.ndx) which will be used to strip off everything
+        in the resulting trajectories except the atoms in the specified by the sub index. 
     
     @param kwargs: a dictionary of arguments that are passed to mdrun.
     
@@ -481,34 +496,45 @@ def run_md(dirname, md_runner=MDrunner, **kwargs):
     for s in notfound_structs:
         logging.warn("guessed output file name {} not found, is a problem????".format(s))
     
-    return Result(found_structs, trajectories)        
+    return Result(found_structs, trajectories)  
+
+def check_main_index(struct):   
+    """
+    All of the gromacs.setup functions auto generate an index file. The __main__ group
+    of this index has to match the starting 'dry' structure if we are auto-solvating. 
+    
+    The __main__ group is used to call trjconv to strip away the added waters. This 
+    approach allows us to continue using the same universe object, reduces code complexity 
+    and significantly speeds up trajectory file processing. 
+    
+    This method returns True if the __main__ group matches the given structure, otherwise
+    an exception is raised.
+    """   
+    dirname = tempfile.mkdtemp()
+    with gromacs.utilities.in_dir(dirname):
+        writer = MDAnalysis.Writer("src.pdb")
+        writer.write(struct)
+        del writer
+        groups = gromacs.setup.make_main_index("src.pdb")
+        
+    for g in groups:
+        if g["name"] == "__main__":
+            if g["natoms"] == len(struct.atoms):
+                print("Autogenerated index group __main__ has same number of atoms as universe.atoms")
+                shutil.rmtree(dirname, ignore_errors=True)
+                return True
+            else:
+                msg = "Autogenerated index group __main__ has" + str(g["natoms"]) + \
+                " atoms, but the given universe structure has " + str(len(struct.atoms)) + \
+                " atoms. Check structure and verify that the __main__ group gromacs.utilities.make_main_index" + \
+                " returns has the same number of atoms."
+                raise ValueError(msg)
+            
+    raise ValueError("gromacs.setup.make_main_index appears to have worked, but there was no __main__ group")
+    
+        
         
     
-def epic_fail():
-    """
-    determine if we are running in load leveler or slurm, and
-    kill the job
-    """
-    
-    # find out what job scheduler we are runing under
-    if os.environ.get('LOADL_STEP_ID', None):
-        cmd = "llcancel {}".format(os.environ.get('LOADL_STEP_ID'))
-        logging.critical("running in load leveler, about to terminate with {}".format(cmd))
-        os.system(cmd)
-    elif os.environ.get('SLURM_JOB_ID', None):
-        cmd = "scancel {}".format(os.environ.get('SLURM_JOB_ID'))
-        logging.critical("running in slurm, about to terminate with {}".format(cmd))
-        os.system(cmd)
-    elif os.environ.get('PBS_JOBID', None):
-        cmd = "qdel {}".format(os.environ.get('PBS_JOBID'))
-        logging.critical("running in Torque / PBS, about to terminate with {}".format(cmd))
-        os.system(cmd)
-    else:
-        logging.critical("running in unknown environment, now what the fuck do we do?")
-    
-    # now just wait for job manager to kill us
-    while True:
-        time.sleep(5)
-        logging.critical("waiting for job to terminate...")
+
         
 
