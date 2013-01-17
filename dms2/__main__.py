@@ -33,7 +33,7 @@ dpc100 = {
 dpc60 = { 
     'box' : [75.0, 75.0, 75.0],      
     'temperature' : 285.0, 
-    'struct': 'dpc60.sol.pdb',
+    'struct': 'dpc60.pdb',
     'top' :  'dpc60.top',
     "subsystem_selects": ["resname DPC"],
     "subsystem_args":["resid unique"],
