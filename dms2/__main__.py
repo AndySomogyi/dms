@@ -53,7 +53,7 @@ dpc5 = {
     'top' :  'dpc5.top',
     "subsystem_selects": ["resname DPC"],
     "subsystem_args":["resid unique"],
-    "cg_steps":100,
+    "cg_steps":30,
     "dt":10,
     "mn_steps":5000,
     "eq_steps":500,
