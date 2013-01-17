@@ -78,7 +78,7 @@ if len(sys.argv) == 4 and sys.argv[1] == "config":
 
 elif len(sys.argv) == 2:
     tempfile.tempdir = os.path.curdir
-    s = system.System('test.hdf')
+    s = system.System('test.hdf', "a")
     
     if sys.argv[1] == "mn":
         os.environ["DMS_DEBUG"] = "TRUE"
@@ -107,7 +107,7 @@ elif len(sys.argv) == 2:
         
 elif len(sys.argv) == 3 and sys.argv[1] == "sol":
     tempfile.tempdir = os.path.curdir
-    s = system.System('test.hdf')
+    s = system.System('test.hdf', "a")
     
     if sys.argv[2] == "sol":
         os.environ["DMS_DEBUG"] = "TRUE"

@@ -215,7 +215,16 @@ class System(object):
     # ivar is set that is not one of these here. 
     __slots__ = ["hdf", "config", "universe", "_box", "ncgs", "subsystems", "cg_positions", "cg_velocities", "cg_forces"]
     
-    def __init__(self, fid):      
+    def __init__(self, fid, mode="r"):
+        """ Create a system object
+        
+        Args: 
+        fid: file name of a configuration hdf file
+        
+        mode: the mode to open the file, defaults to "r" - read only. For running a simulation, it should
+        be "a" -  Read/write if exists
+        """
+           
         logging.info("creating System, fid={}".format(fid))
         self.hdf = h5py.File(fid)
         self.config = self.hdf[CONFIG].attrs
