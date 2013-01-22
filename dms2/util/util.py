@@ -1,4 +1,4 @@
-"""
+ """
 Created on Dec 19, 2012
 
 @author: andy
@@ -105,6 +105,17 @@ def get_class( klass ):
     this loads the module and returns the class type. 
     
     the ctor on the class type can then be called to create an instance of the class.
+
+    For example, to create an instance of the above class, 
+
+    # get the type
+    t = util.get_class("datetime.datetime")
+
+    # no create an instance
+    i = t()
+
+    This is equivalent to 
+    i = datetime.datetime()
     """
     parts = klass.split('.')
     module = ".".join(parts[:-1])
