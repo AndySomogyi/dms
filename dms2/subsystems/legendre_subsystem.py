@@ -70,8 +70,8 @@ class LegendreSubsystem(subsystems.SubSystem):
         
         return phi 
 
-	def ComputeCG_Forces(self,atomic_forces):
-		"""
+    def ComputeCG_Forces(self,atomic_forces):
+	"""
         calculates \phi_force = U^t f
         for each column in r, i.e. x, y, z
         """
@@ -83,27 +83,27 @@ class LegendreSubsystem(subsystems.SubSystem):
         
         return ForcePhi
 
-	def Construct_Basis(self, Scaled_Pos):
-		"""
-		Constructs a matrix of orthonormalized legendre basis functions
-		of size 3*Natoms x NCG 
-		""" 
-		Indices = self.ComputeIndices(kmax)
-	    Masses = np.reshape(self._Masses, [len(self._Masses), 1])
-	    Basis = np.zeros([Scaled_Pos.shape[0], Indices.shape[0]],'f')
+     def Construct_Basis(self, Scaled_Pos):
+	"""
+	Constructs a matrix of orthonormalized legendre basis functions
+	of size 3*Natoms x NCG 
+	""" 
+	Indices = self.ComputeIndices(kmax)
+	Masses = np.reshape(self._Masses, [len(self._Masses), 1])
+	Basis = np.zeros([Scaled_Pos.shape[0], Indices.shape[0]],'f')
 	    
-	    for i in xrange(u.shape[1]):
-	        px = legendre(indexes[i,0])(x)
-	        py = legendre(indexes[i,1])(y)
-	        pz = legendre(indexes[i,2])(z)
-	        Basis[:,i] = px * py * pz
+	for i in xrange(u.shape[1]):
+	    px = legendre(indexes[i,0])(x)
+	    py = legendre(indexes[i,1])(y)
+	    pz = legendre(indexes[i,2])(z)
+	    Basis[:,i] = px * py * pz
 	         
-	    Basis = Basis * sqrt(w)
+	Basis = Basis * sqrt(w)
 
-	    ONBasis,r = linalg.qr(u, 'full')    
-	    ONBasis /= sqrt(Masses)
-	        
-	    return ONBasis
+	ONBasis,r = linalg.qr(u, 'full')    
+	ONBasis /= sqrt(Masses)
+            
+        return ONBasis
 	        
 def LegendreSubsystemFactory(system, selects, *args): 
     
