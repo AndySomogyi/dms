@@ -594,7 +594,7 @@ class System(object):
             mdres = md.run_md(result.dirname, **result)
             result["struct"] = mdres.structs[0]
             result["sub"] = sub
-            self.universe.atoms.positions[:] = util.stripped_positions(mdres.structs[0], sub)
+            self.universe.atoms.positions = util.stripped_positions(mdres.structs[0], sub)
             
         self.current_timestep.atomic_equilibriated_positions = self.universe.atoms.positions   
         [s.equilibriated() for s in self.subsystems]
@@ -729,7 +729,7 @@ class System(object):
                                      deffnm="mn", \
                                      **self.mn_args)
             result["sub"] = sub
-            self.universe.atoms.positions[:] = util.stripped_positions(result["struct"], sub)
+            self.universe.atoms.positions = util.stripped_positions(result["struct"], sub)
             
         # done with external md
         self.current_timestep.atomic_minimized_positions = self.universe.atoms.positions
@@ -795,7 +795,7 @@ class System(object):
         
         if ists:      
             try:
-                self.universe.atoms.positions[()] = ts.atomic_starting_positions
+                self.universe.atoms.positions = ts.atomic_starting_positions
             except:
                 print("failed to set atomic positions")
                 
@@ -805,7 +805,7 @@ class System(object):
                 print("failed to set cg_positions")
                 
             try:
-                self.cg_velocities = ts.cg_velocities
+                self.cg_velocities[()] = ts.cg_velocities
             except:
                 print("failed to set cg_velocities")
                 
