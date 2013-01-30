@@ -136,6 +136,8 @@ NSTFOUT = "nstfout"
 BOX = "box"
 TEMPERATURE="temperature"
 DT = "dt"
+INTEGRATOR = "integrator"
+INTEGRATOR_ARGS = "integrator_args"
 
 class Timestep(object):
     """
@@ -308,7 +310,20 @@ class System(object):
     def should_solvate(self):
         return bool(self.config[SHOULD_SOLVATE])
     
+    @property
+    def cg_steps(self):
+        return int(self.config[CG_STEPS])
     
+    def integrator(self):
+        """
+        Create an integrator based on what the config file specified. 
+        
+        The resulting integrator is initialized with this system, and
+        whatever addational arguments were specified in the config.
+        """
+        integrator_type = util.get_class(self.config[INTEGRATOR])
+        return integrator_type(self, *self.config[INTEGRATOR_ARGS])
+        
     def _get_file_data(self, file_key):
         """
         finds a file stored as an hdf key. This first looks if there is a 'current_timestep', 
@@ -321,14 +336,13 @@ class System(object):
             file_key = SRC_FILES + "/" + file_key
         return self.hdf[file_key]
     
-    def __last_timestep(self):
+    @property
+    def last_timestep(self):
         """
         Gets the last completed timestep, or None if this is the first timestep.
         
         If only the last timestep is required, this approach is more effecient than
         building an entire list.
-        
-        Public API should only call the "timesteps" method.
         """
         timesteps = [int(k) for k in self.hdf[TIMESTEPS].keys()]
         if len(timesteps):
@@ -362,7 +376,7 @@ class System(object):
         current_group = self.hdf.create_group(CURRENT_TIMESTEP)
         self.current_timestep.timestep_begin = time.time()
             
-        last = self.__last_timestep()
+        last = self.last_timestep
         timestep_number = 0
         if last:
             # link the starting positions to the previous timesteps final positions
@@ -447,7 +461,7 @@ class System(object):
         timestep, loads from the 'src_files' key.
         """
 
-        last = self.__last_timestep()
+        last = self.last_timestep
         if last:
             logging.info("loading universe from most recent timestep of {}".format(last._group.name))
             return last.create_universe()
@@ -464,33 +478,28 @@ class System(object):
                 f.file.flush()
                 u = MDAnalysis.Universe(f.name)
                 return u
-                
-    def run(self):
-        """
-        Run the simulation for as many timesteps as specified by the configuration.
-        
-        This will automatically start at the last completed timestep and proceed untill
-        all the specified timesteps are completed.
-        """
-        last = self.__last_timestep()
-        start = last.timestep + 1 if last else 0
-        del last
-        end = int(self.config[CG_STEPS])
-        
-        logging.info("running timesteps {} to {}".format(start, end))
-        
-        for _ in range(start, end):
-            self.step()
-            
-        logging.info("completed all {} timesteps".format(end-start))
-   
+                   
 
-    def step(self):
+    def atomistic_step(self):
         """
-        performs a single time step
-        """
-        self.begin_timestep()
+        Performs a timestep on the atomistic scale using universe object as the 
+        starting state. 
         
+        This entails vacuum minimizing, optionally solvating and solvent minimizing, 
+        equilibriating and finally running a series of MD runs to populate the
+        cg_positions, cg_forces and cg_velocities state variables, and 
+        saving these values to the current timestep. 
+        
+        This method requires a current_timestep, as such, it must be called between
+        begin_timestep and end_timestep.
+        
+        @precondition: self.universe contains a starting atomic structure, and the
+        current_timestep exists. 
+        
+        @postcondition: self.universe contains a equilibriated structure, 
+         cg_positions, cg_forces and cg_velocities are populated with md values, 
+         and these values are saved to the current_timestep. 
+        """
         # first minimize in vacuum, in either case, 
         # fixes problems with langevin bond deformation.
         self.minimize()
@@ -504,35 +513,7 @@ class System(object):
             self.equilibriate()
             self.md()
         
-        self.evolve()
-        
-        self.end_timestep()
-        
-        
-    def evolve(self):
-        """
-        perform a forward euler step (the most idiotic and unstable of all possible integrators)
-        to integrate the state variables. 
-        
-        reads self.cg_velocities (or possibly self.cg_forces) to calculat the diffusion matrix, 
-        averages cg_forces, calculates D*f and notifies each subsystem with it's respective part
-        of this vector to translate. 
-        
-        X[n+1] = X[n] + dt*dX/dt[n], and dX/dt is D*f.
-        """
-        
-        # forward euler
-        # result = coordinate_ops + beta() * dt * Df
-        Df = dynamics.diffusion_force(self) 
-        
-        # Df is a column vector, change it to a row vector, as the subsystems
-        # expect a length(ncg) row vector. 
-        Df = Df.transpose()
-        
-        # per euler step, 
-        # translate = dt * beta * dX/dt
-        cg_translate = self.dt * self.beta * Df
-        
+    def translate(self, cg_translate):
         #write to ts
         self.current_timestep.cg_translate = cg_translate
         
@@ -935,6 +916,8 @@ def create_config(fid,
                   subsystem_factory = "dms2.subsystems.RigidSubsystemFactory",
                   subsystem_selects = ["not resname SOL"],
                   subsystem_args = [],
+                  integrator = "dms2.integrators.LangevinIntegrator",
+                  integrator_args = [],
                   cg_steps = 10,
                   dt  = 0.1,
                   mn_steps = 500,
@@ -984,8 +967,6 @@ def create_config(fid,
             print("error reading periodic boundary conditions")
             raise e
 
-
-
         attr(CG_STEPS, int, cg_steps)
         attr(DT, float, dt)
         attr(TEMPERATURE, float, temperature)
@@ -998,7 +979,18 @@ def create_config(fid,
         attr(MN_ARGS, dict, mn_args)
         attr(EQ_ARGS, dict, eq_args)
         attr(MD_ARGS, dict, md_args)
-
+        
+        # try to create an integrator
+        attr(INTEGRATOR, str, integrator)
+        attr(INTEGRATOR_ARGS, list, integrator_args)
+        try:
+            integrator_type = util.get_class(conf[INTEGRATOR])
+            integrator_type(None, *conf[INTEGRATOR_ARGS])
+            print("succesfully created integrator {}".format(integrator))
+        except Exception, e:
+            print("error creating integrator {}".format(integrator))
+            raise e
+        
         # check struct
         try:
             gromacs.gmxcheck(f=struct) #@UndefinedVariable

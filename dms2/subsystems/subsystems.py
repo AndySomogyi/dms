@@ -5,6 +5,13 @@ Created on Oct 3, 2012
 '''
 
 class SubSystem(object):
+    """
+    Defines the interface that a subsystem object must implement. 
+    As this is Python, it is not a requirement for subsystems to actually 
+    derive from this clas, provided that they define all the methods defined
+    here. This class just provides empty implementations of all the 
+    required interface methods.
+    """
     
     def universe_changed(self, universe):
         """ 

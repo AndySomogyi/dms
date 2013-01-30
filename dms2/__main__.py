@@ -95,15 +95,22 @@ elif len(sys.argv) == 2:
         s.begin_timestep()
         s.md()
         s.end_timestep()
+    elif sys.argv[1] == "atomistic_step":
+        os.environ["DMS_DEBUG"] = "TRUE"
+        s.atomistic_step()
     elif sys.argv[1] == "step":
         os.environ["DMS_DEBUG"] = "TRUE"
-        s.step()
-    elif sys.argv[1] == "test":
+        integrator = s.integrator()
+        s.atomistic_step()
+        integrator.cg_step()
+    elif sys.argv[1] == "cg_step":
         os.environ["DMS_DEBUG"] = "TRUE"
         s._load_ts(s.current_timestep)
-        s.evolve()
+        integrator = s.integrator()
+        integrator.cg_step()
     elif sys.argv[1] == "run":
-        s.run()
+        integrator = s.integrator()
+        integrator.run()
         
 elif len(sys.argv) == 3 and sys.argv[1] == "sol":
     tempfile.tempdir = os.path.curdir
