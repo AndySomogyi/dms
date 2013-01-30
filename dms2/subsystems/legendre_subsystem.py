@@ -25,22 +25,22 @@ class LegendreSubsystem(subsystems.SubSystem):
         """
         Create a legendre subsystem.
         @param system: an object (typically the system this subsystem belongs to)
-            which has the following attributes:
-                box: an array describing the periodic boundary conditions.
+        which has the following attributes:
+        box: an array describing the periodic boundary conditions.
         @param select: a select string used for Universe.selectAtoms which selects 
-            the atoms that make up this subsystem.
+        the atoms that make up this subsystem.
         """
         self.system = system
         self.select = select
         
     def universe_changed(self, universe):
         self.atoms = universe.selectAtoms(self.select)
-        
+            
     def frame(self):
         # make a column vector
         ScaledPos = self.atoms.positions / self.system.box
-        self._Basis = Construct_Basis() #Must NOT be updated every CG step
-
+        self._Basis = self.Construct_Basis() #Must NOT be updated every CG step
+        
         CG_Pos = self.ComputeCG(self.atoms.positions)
         CG_Vel = self.ComputeCG(self.atoms.velocities)
         CG_For = self.ComputeCG_Forces(self.atoms.forces)
@@ -49,15 +49,16 @@ class LegendreSubsystem(subsystems.SubSystem):
     
     def translate(self, values):
         self.atoms.positions += values
-    
+        
     def minimized(self):
         pass
-    
+
     def equilibriated(self):
         pass
 
     def ComputeCG(self,r):
         """
+        foo
         calculates \phi = U^t M r 
         for each column in r, i.e. x, y, z
         """
@@ -69,9 +70,10 @@ class LegendreSubsystem(subsystems.SubSystem):
         phi[:,2] = np.dot(Utw, r[:,2])
         
         return phi 
-
+    
     def ComputeCG_Forces(self,atomic_forces):
-	"""
+        """
+        foo
         calculates \phi_force = U^t f
         for each column in r, i.e. x, y, z
         """
@@ -82,29 +84,29 @@ class LegendreSubsystem(subsystems.SubSystem):
         ForcePhi[:,2] = np.dot(self._Basis.T, atomic_forces[:,2])
         
         return ForcePhi
-
-     def Construct_Basis(self, Scaled_Pos):
-	"""
-	Constructs a matrix of orthonormalized legendre basis functions
-	of size 3*Natoms x NCG 
-	""" 
-	Indices = self.ComputeIndices(kmax)
-	Masses = np.reshape(self._Masses, [len(self._Masses), 1])
-	Basis = np.zeros([Scaled_Pos.shape[0], Indices.shape[0]],'f')
-	    
-	for i in xrange(u.shape[1]):
-	    px = legendre(indexes[i,0])(x)
-	    py = legendre(indexes[i,1])(y)
-	    pz = legendre(indexes[i,2])(z)
-	    Basis[:,i] = px * py * pz
-	         
-	Basis = Basis * sqrt(w)
-
-	ONBasis,r = linalg.qr(u, 'full')    
-	ONBasis /= sqrt(Masses)
+    
+    def Construct_Basis(self, Scaled_Pos):
+        """
+        Constructs a matrix of orthonormalized legendre basis functions
+        of size 3*Natoms x NCG 
+        """ 
+        Indices = self.ComputeIndices(kmax)
+        Masses = np.reshape(self._Masses, [len(self._Masses), 1])
+        Basis = np.zeros([Scaled_Pos.shape[0], Indices.shape[0]],'f')
+        
+        for i in xrange(u.shape[1]):
+            px = legendre(indexes[i,0])(x)
+            py = legendre(indexes[i,1])(y)
+            pz = legendre(indexes[i,2])(z)
+            Basis[:,i] = px * py * pz
             
+        Basis = Basis * sqrt(w)
+            
+        ONBasis,r = linalg.qr(u, 'full')    
+        ONBasis /= sqrt(Masses)
+        
         return ONBasis
-	        
+
 def LegendreSubsystemFactory(system, selects, *args): 
     
     if len(args) == 1:
