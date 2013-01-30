@@ -58,7 +58,6 @@ class LegendreSubsystem(subsystems.SubSystem):
 
     def ComputeCG(self,r):
         """
-        foo
         calculates \phi = U^t M r 
         for each column in r, i.e. x, y, z
         """
@@ -73,7 +72,6 @@ class LegendreSubsystem(subsystems.SubSystem):
     
     def ComputeCG_Forces(self,atomic_forces):
         """
-        foo
         calculates \phi_force = U^t f
         for each column in r, i.e. x, y, z
         """
