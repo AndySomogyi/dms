@@ -39,7 +39,7 @@ class LegendreSubsystem(subsystems.SubSystem):
     def frame(self):
         # make a column vector
         ScaledPos = self.atoms.positions / self.system.box
-        self._Basis = self.Construct_Basis() #Must NOT be updated every CG step
+        self._Basis = self.Construct_Basis() # Update this every CG step for now
         
         CG_Pos = self.ComputeCG(self.atoms.positions)
         CG_Vel = self.ComputeCG(self.atoms.velocities)
@@ -56,33 +56,30 @@ class LegendreSubsystem(subsystems.SubSystem):
     def equilibriated(self):
         pass
 
-    def ComputeCG(self,r):
+    def ComputeCGInv(self,CG):
         """
-        calculates \phi = U^t M r 
-        for each column in r, i.e. x, y, z
+        Computes atomic positions from CG positions
+        Using the simplest scheme for now
         """
-        phi = np.zeros([self._Basis.shape[1], 3], 'f')
+        return np.dot(self._Basis,CG)
+
+    def ComputeCG(self,var):
+        """
+        Computes CG momenta or positions
+        CG = U^t * Mass * var
+        var could be positions or velocities 
+        """
         Utw = (self._Basis.T * self._Masses)
         
-        phi[:,0] = np.dot(Utw, r[:,0])
-        phi[:,1] = np.dot(Utw, r[:,1])
-        phi[:,2] = np.dot(Utw, r[:,2])
+        return np.dot(Utw,var)
         
-        return phi 
-    
     def ComputeCG_Forces(self,atomic_forces):
         """
-        calculates \phi_force = U^t f
-        for each column in r, i.e. x, y, z
+        Computes CG forces = U^t * <f>
+        for an ensemble average atomic force <f>
         """
-        ForcePhi = np.zeros([self._U.shape[1], 3], 'f')
+        return np.dot(self._Basis.T, atomic_forces)
         
-        ForcePhi[:,0] = np.dot(self._Basis.T, atomic_forces[:,0])
-        ForcePhi[:,1] = np.dot(self._Basis.T, atomic_forces[:,1])
-        ForcePhi[:,2] = np.dot(self._Basis.T, atomic_forces[:,2])
-        
-        return ForcePhi
-    
     def Construct_Basis(self, Scaled_Pos):
         """
         Constructs a matrix of orthonormalized legendre basis functions
@@ -104,6 +101,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         ONBasis /= sqrt(Masses)
         
         return ONBasis
+
 
 def LegendreSubsystemFactory(system, selects, *args): 
     
