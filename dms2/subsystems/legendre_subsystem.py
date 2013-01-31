@@ -95,12 +95,12 @@ class LegendreSubsystem(subsystems.SubSystem):
             pz = legendre(indexes[i,2])(z)
             Basis[:,i] = px * py * pz
             
-        Basis = Basis * sqrt(w)
+        WBasis = Basis * np.sqrt(Masses)
             
-        ONBasis,r = linalg.qr(u, 'full')    
-        ONBasis /= sqrt(Masses)
+        WBasis,r = linalg.qr(WBasis, 'full')    
+        WBasis /= np.sqrt(Masses)
         
-        return ONBasis
+        return WBasis
 
 
 def LegendreSubsystemFactory(system, selects, *args): 
