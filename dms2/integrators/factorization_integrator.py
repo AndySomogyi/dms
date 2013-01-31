@@ -5,7 +5,7 @@ Created on Jan 30, 2013
 '''
 
 import integrator
-import dynamics
+import dms2.dynamics as dynamics
 
 class FactorizationIntegrator(integrator.Integrator):
     def cg_step(self):
