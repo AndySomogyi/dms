@@ -33,7 +33,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         """
         self.system = system
         self.select = select
-        self.Indices = pindices
+        self.pindices = pindices
         
     def universe_changed(self, universe):
         self.atoms = universe.selectAtoms(self.select)
