@@ -479,39 +479,6 @@ class System(object):
                 u = MDAnalysis.Universe(f.name)
                 return u
                    
-
-    def atomistic_step(self):
-        """
-        Performs a timestep on the atomistic scale using universe object as the 
-        starting state. 
-        
-        This entails vacuum minimizing, optionally solvating and solvent minimizing, 
-        equilibriating and finally running a series of MD runs to populate the
-        cg_positions, cg_forces and cg_velocities state variables, and 
-        saving these values to the current timestep. 
-        
-        This method requires a current_timestep, as such, it must be called between
-        begin_timestep and end_timestep.
-        
-        @precondition: self.universe contains a starting atomic structure, and the
-        current_timestep exists. 
-        
-        @postcondition: self.universe contains a equilibriated structure, 
-         cg_positions, cg_forces and cg_velocities are populated with md values, 
-         and these values are saved to the current_timestep. 
-        """
-        # first minimize in vacuum, in either case, 
-        # fixes problems with langevin bond deformation.
-        self.minimize()
-        
-        if self.should_solvate:
-            with self.solvate() as sol:
-                with self.minimize(**sol) as mn:
-                    with self.equilibriate(**mn) as eq:
-                        self.md(**eq)
-        else:
-            self.equilibriate()
-            self.md()
         
     def translate(self, cg_translate):
         #write to ts

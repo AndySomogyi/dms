@@ -97,17 +97,21 @@ elif len(sys.argv) == 2:
         s.end_timestep()
     elif sys.argv[1] == "atomistic_step":
         os.environ["DMS_DEBUG"] = "TRUE"
-        s.atomistic_step()
+        integrator = s.integrator()
+        s.begin_timestep()
+        integrator.atomistic_step()
+        s.end_timestep()
     elif sys.argv[1] == "step":
         os.environ["DMS_DEBUG"] = "TRUE"
         integrator = s.integrator()
-        s.atomistic_step()
-        integrator.cg_step()
+        integrator.step()
     elif sys.argv[1] == "cg_step":
         os.environ["DMS_DEBUG"] = "TRUE"
         s._load_ts(s.current_timestep)
         integrator = s.integrator()
+        s.begin_timestep()
         integrator.cg_step()
+        s.end_timestep()
     elif sys.argv[1] == "run":
         integrator = s.integrator()
         integrator.run()
