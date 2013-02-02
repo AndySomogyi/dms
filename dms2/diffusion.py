@@ -64,7 +64,7 @@ def diff_from_corr(vi, vj, dt, int_points = 4):
     
     # inaccurate integration (for only 4 points)  
     # Best to use orthogonal polynomials for fitting
-    # the ACs, but for now keeps this for comparison
+    # the ACs, but for now keep this for comparison
     # with snw. 
     return np.trapz(corr[:int_points],dx=dt)
 
