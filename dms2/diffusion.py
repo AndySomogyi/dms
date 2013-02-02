@@ -44,7 +44,7 @@ def diff_from_vel(v, dt):
     size = Nsubsys * NCG * Ndim
     return np.reshape(dtensor,(size,size))
 
-def diff_from_corr(vi, vj, dt):
+def diff_from_corr(vi, vj, dt, int_points = 4):
     """
     calculate the diffusion coefecient for a pair of time series vi, vj
     @param vi: an n * nt array of time series
@@ -65,7 +65,7 @@ def diff_from_corr(vi, vj, dt):
     # Best to use orthogonal polynomials for fitting
     # the ACs, but for now keeps this for comparison
     # with snw. 
-    return np.trapz(corr[:4],dx=dt)
+    return np.trapz(corr[:int_points],dx=dt)
 
 def Correlation(x,y):
     """
