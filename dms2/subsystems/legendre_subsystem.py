@@ -15,6 +15,7 @@ Created on January 27, 2013
 import subsystems
 import numpy as np
 from scipy.special import legendre
+from scipy.linalg import qr
 import MDAnalysis as md
 
 class LegendreSubsystem(subsystems.SubSystem):
@@ -98,11 +99,34 @@ class LegendreSubsystem(subsystems.SubSystem):
             Basis[:,i] = px * py * pz
             
         WBasis = Basis * np.sqrt(Masses)
-            
-        WBasis,r = linalg.qr(WBasis, 'full')    
+        WBasis,r = QR_Decomp(WBasis, 'unormalized')    
         WBasis /= np.sqrt(Masses)
         
         return WBasis
+
+    def QR_Decomp(V,dtype):
+        """ 
+        QR_Decomp is an experimental function. Should be eventually deleted.
+        """
+        
+        if dtype is 'normalized':
+            V,R = qr(V, mode='economic')
+        else:
+            n,k = V.shape
+
+            for j in xrange(k):
+                U = V[:,j].copy()
+
+                for i in xrange(j):
+                    U -= (dot(V[:,i],V[:,j]) / norm(V[:,i])**2.0) * V[:,i]
+
+                V[:,j] = U.copy()
+
+            #normalize U; uncomment this line for orthonormalized GS
+            for j in xrange(k):
+                V[:,j] /= norm(V[:,j])
+
+        return V
 
 def poly_indexes(psum):
     """
