@@ -4,7 +4,7 @@ Created on Jan 6, 2013
 @author: andy
 '''
 import numpy as np
-#import system
+import system
 from numpy.fft import fft, ifft, fftshift
 
 def diffusion(obj):
