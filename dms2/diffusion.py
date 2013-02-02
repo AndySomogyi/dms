@@ -6,6 +6,7 @@ Created on Jan 6, 2013
 import numpy as np
 import system
 from numpy.fft import fft, ifft, fftshift
+import correlation as corr
 
 def diffusion(obj):
     """
@@ -56,7 +57,7 @@ def diff_from_corr(vi, vj, dt, int_points = 4):
     corr = np.min(np.array([vi.shape[1],vj.shape[1]]))
 
     for i in np.arange(vi.shape[0]):
-        corr += Correlation(vi[i,:],vj[i,:])
+        corr += corr.FFT_Correlation(vi[i,:],vj[i,:])
         
     # average correlation func        
     corr /= float(vi.shape[0])      
@@ -66,30 +67,6 @@ def diff_from_corr(vi, vj, dt, int_points = 4):
     # the ACs, but for now keeps this for comparison
     # with snw. 
     return np.trapz(corr[:int_points],dx=dt)
-
-def Correlation(x,y):
-    """
-    FFT-based correlation, much faster than numpy autocorr
-    x and y are row-based vectors.
-    """
-
-    lengthx = x.shape[0]
-    lengthy = y.shape[0]
-
-    x = np.reshape(x,(1,lengthx))
-    y = np.reshape(y,(1,lengthy))
-
-    fftx = fft(x, 2 * lengthx - 1, axis=1) #pad with zeros
-    ffty = fft(y, 2 * lengthy - 1, axis=1)
-
-    corr_xy = ifft(fftx * np.conjugate(ffty), axis=1)
-    corr_xy = np.real(fftshift(corr_xy, axes=1)) #should be no imaginary part
-
-    corr_yx = ifft(ffty * np.conjugate(fftx), axis=1)
-    corr_yx = np.real(fftshift(corr_yx, axes=1))
-
-    corr = 0.5 * (corr_xy[:,lengthx:] / range(1,lengthx)[::-1] + corr_yx[:,lengthy:] / range(1,lengthy)[::-1])
-    return np.reshape(corr,corr.shape[1])
 
 def stokes(T, r):
     """
