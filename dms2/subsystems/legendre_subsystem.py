@@ -40,16 +40,20 @@ class LegendreSubsystem(subsystems.SubSystem):
         self.atoms = universe.selectAtoms(self.select)
             
     def frame(self):
-        # make a column vector
-        ScaledPos = self.atoms.positions / self.system.box
-        self._Basis = self.Construct_Basis() # Update this every CG step for now
+        coords = self.atoms.positions
+        GeoCenter = array([sum(coords[:,0]), \
+                                sum(coords[:,1]), \
+                                sum(coords[:,2])], 'f') / float(coords.shape[0])
+
+        ScaledPos = coords / self.system.box
+        Basis = self.Construct_Basis(ScaledPos - GeoCenter) # Update this every CG step for now
         
         CG_Pos = self.ComputeCG(self.atoms.positions)
         CG_Vel = self.ComputeCG(self.atoms.velocities)
         CG_For = self.ComputeCG_Forces(self.atoms.forces)
 
         return (CG_Pos, CG_Vel, CG_For)
-    
+
     def translate(self, values):
         self.atoms.positions += values
         
@@ -93,9 +97,9 @@ class LegendreSubsystem(subsystems.SubSystem):
         Basis = np.zeros([Scaled_Pos.shape[0], self.pindices.shape[0]],'f')
         
         for i in xrange(u.shape[1]):
-            px = legendre(self.pindices[i,0])(x)
-            py = legendre(self.pindeces[i,1])(y)
-            pz = legendre(self.pindeces[i,2])(z)
+            px = legendre(self.pindices[i,0])(Scaled_Pos[:,0])
+            py = legendre(self.pindices[i,1])(Scaled_Pos[:,1])
+            pz = legendre(self.pindices[i,2])(Scaled_Pos[:,2])
             Basis[:,i] = px * py * pz
             
         WBasis = Basis * np.sqrt(Masses)
@@ -122,7 +126,7 @@ class LegendreSubsystem(subsystems.SubSystem):
 
                 V[:,j] = U.copy()
 
-            #normalize U; uncomment this line for orthonormalized GS
+            #normalize U; comment the two lines below for orthogonal GS
             for j in xrange(k):
                 V[:,j] /= norm(V[:,j])
 
