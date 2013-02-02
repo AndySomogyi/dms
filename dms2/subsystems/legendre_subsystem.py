@@ -12,6 +12,7 @@ Created on January 27, 2013
 
 @author: Andrew-AM
 '''
+
 import subsystems
 import numpy as np
 from scipy.special import legendre
@@ -45,8 +46,8 @@ class LegendreSubsystem(subsystems.SubSystem):
                                 sum(coords[:,1]), \
                                 sum(coords[:,2])], 'f') / float(coords.shape[0])
 
-        ScaledPos = coords / self.system.box
-        Basis = self.Construct_Basis(ScaledPos - GeoCenter) # Update this every CG step for now
+        ScaledPos = (coords - GeoCenter)/ self.system.box
+        Basis = self.Construct_Basis(ScaledPos) # Update this every CG step for now
         
         CG_Pos = self.ComputeCG(self.atoms.positions)
         CG_Vel = self.ComputeCG(self.atoms.velocities)
@@ -148,6 +149,7 @@ def poly_indexes(psum):
         for i in range(n+1):
             for j in range(n+1-i):
                 a.append([n-i-j, j, i])
+
     return np.array(a,'i')
 
 
