@@ -8,6 +8,7 @@ from numpy import array, ndarray, arange, zeros, convolve, sum, std, mean, cumsu
 from random import randrange
 import h5py #@UnresolvedImport
 import pylab as p
+import numpy as np
 
 def correlation(x1, x2, window=None):
     """
