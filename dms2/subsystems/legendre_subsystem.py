@@ -50,7 +50,7 @@ class LegendreSubsystem(subsystems.SubSystem):
     def universe_changed(self, universe):
         self.atoms = universe.selectAtoms(self.select)
     
-    def center_of geo(self):
+    def center_of_geo(self):
         coords = self.coords
         return np.array([sum(coords[:,0]), sum(coords[:,1]), sum(coords[:,2])], 'f') / float(coords.shape[0])
         
