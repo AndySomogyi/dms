@@ -37,24 +37,35 @@ class LegendreSubsystem(subsystems.SubSystem):
         self.select = select
         self.pindices = pindices
         
+        # Atomic subcvariableslass
+        self.coords = system.atoms.positions
+        self.geo_center = self.center_of geo()
+
+        # Coarse-Grained variables
+        self.basis = self.Construct_Basis(self.coords) 
+        self.CG = self.ComputeCG(self.atoms.positions)
+        self.CG_Vel = self.ComputeCG(self.atoms.velocities)
+        self.CG_For = self.ComputeCG_Forces(self.atoms.forces)
+        
     def universe_changed(self, universe):
         self.atoms = universe.selectAtoms(self.select)
-            
-    def frame(self):
-        coords = self.atoms.positions
-        GeoCenter = array([sum(coords[:,0]), \
-                                sum(coords[:,1]), \
-                                sum(coords[:,2])], 'f') / float(coords.shape[0])
-
-        ScaledPos = (coords - GeoCenter)/ self.system.box
-        Basis = self.Construct_Basis(ScaledPos) # Update this every CG step for now
+    
+    def center_of geo(self):
+        coords = self.coords
+        return np.array([sum(coords[:,0]), sum(coords[:,1]), sum(coords[:,2])], 'f') / float(coords.shape[0])
         
-        CG_Pos = self.ComputeCG(self.atoms.positions)
-        CG_Vel = self.ComputeCG(self.atoms.velocities)
-        CG_For = self.ComputeCG_Forces(self.atoms.forces)
+    def frame(self):
+        self.basis = self.Construct_Basis(self.coords)  # Update this every CG step for now
+        
+        self.CG = self.ComputeCG(self.atoms.positions)
+        self.CG_Vel = self.ComputeCG(self.atoms.velocities)
+        self.CG_For = self.ComputeCG_Forces(self.atoms.forces)
 
-        return (CG_Pos, CG_Vel, CG_For)
+        return (self.CG, self.CG_Vel, self.CG_For)
 
+    def center_of_mass(self, var):
+        return np.dot(var,self.atoms.masses) / np.sum(self.atoms.masses)
+        
     def translate(self, values):
         self.atoms.positions += values
         
@@ -75,26 +86,26 @@ class LegendreSubsystem(subsystems.SubSystem):
         """
         Computes CG momenta or positions
         CG = U^t * Mass * var
-        var could be positions or velocities 
+        var could be atomic positions or velocities 
         """
-        Utw = (self._Basis.T * self._Masses)
+        Utw = (self.basis.T * self.atoms.masses)
         
-        return np.dot(Utw,var)
+        return np.dot(Utw,var - self.center_of_mass(var))
         
     def ComputeCG_Forces(self,atomic_forces):
         """
         Computes CG forces = U^t * <f>
         for an ensemble average atomic force <f>
         """
-        return np.dot(self._Basis.T, atomic_forces)
+        return np.dot(self.basis.T, atomic_forces)
         
-    def Construct_Basis(self, Scaled_Pos):
+    def Construct_Basis(self):
         """
         Constructs a matrix of orthonormalized legendre basis functions
         of size 3*Natoms x NCG 
         """ 
-        
-        Masses = np.reshape(self._Masses, [len(self._Masses), 1])
+        ScaledPos = (self.coords - self.geo_center) / self.system.box
+        Masses = np.reshape(self.atoms.masses, [len(self.atoms.masses), 1])
         Basis = np.zeros([Scaled_Pos.shape[0], self.pindices.shape[0]],'f')
         
         for i in xrange(u.shape[1]):
