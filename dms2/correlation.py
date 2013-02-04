@@ -41,8 +41,9 @@ def correlation(x1, x2, window=None):
 
 def FFT_Correlation(x,y):
     """
-    FFT-based correlation, much faster than numpy autocorr
-    x and y are row-based vectors.
+    FFT-based correlation, much faster than numpy autocorr.
+    x and y are row-based vectors of arbitrary lengths.
+    This is a vectorized implementation of O(N*log(N)) flops.
     """
 
     lengthx = x.shape[0]
@@ -51,8 +52,13 @@ def FFT_Correlation(x,y):
     x = np.reshape(x,(1,lengthx))
     y = np.reshape(y,(1,lengthy))
 
-    fftx = fft(x, 2 * lengthx - 1, axis=1) #pad with zeros
-    ffty = fft(y, 2 * lengthy - 1, axis=1)
+    length = np.array([lengthx, lengthy]).min()
+    
+    x = x[:length]
+    y = y[:length]
+    
+    fftx = fft(x, 2 * length - 1, axis=1) #pad with zeros
+    ffty = fft(y, 2 * length - 1, axis=1)
 
     corr_xy = ifft(fftx * np.conjugate(ffty), axis=1)
     corr_xy = np.real(fftshift(corr_xy, axes=1)) #should be no imaginary part
@@ -60,7 +66,7 @@ def FFT_Correlation(x,y):
     corr_yx = ifft(ffty * np.conjugate(fftx), axis=1)
     corr_yx = np.real(fftshift(corr_yx, axes=1))
 
-    corr = 0.5 * (corr_xy[:,lengthx:] / range(1,lengthx)[::-1] + corr_yx[:,lengthy:] / range(1,lengthy)[::-1])
+    corr = 0.5 * (corr_xy[:,length:] + corr_yx[:,length:]) / range(1,length)[::-1])
     return np.reshape(corr,corr.shape[1])
 
 def vacf(v1, v2, acflen=None):
