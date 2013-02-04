@@ -37,11 +37,10 @@ class LegendreSubsystem(subsystems.SubSystem):
         self.select = select
         self.pindices = pindices
         
-        # Atomic subcvariableslass
+        # Atom-related variables
         self.coords = system.atoms.positions
-        self.geo_center = self.center_of geo()
 
-        # Coarse-Grained variables
+        # CG-related variables
         self.basis = self.Construct_Basis(self.coords) 
         self.CG = self.ComputeCG(self.atoms.positions)
         self.CG_Vel = self.ComputeCG(self.atoms.velocities)
@@ -49,10 +48,6 @@ class LegendreSubsystem(subsystems.SubSystem):
         
     def universe_changed(self, universe):
         self.atoms = universe.selectAtoms(self.select)
-    
-    def center_of_geo(self):
-        coords = self.coords
-        return np.array([sum(coords[:,0]), sum(coords[:,1]), sum(coords[:,2])], 'f') / float(coords.shape[0])
         
     def frame(self):
         self.basis = self.Construct_Basis(self.coords)  # Update this every CG step for now
@@ -104,7 +99,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         Constructs a matrix of orthonormalized legendre basis functions
         of size 3*Natoms x NCG 
         """ 
-        ScaledPos = (self.coords - self.geo_center) / self.system.box
+        ScaledPos = (self.coords - self.atoms.centroid()) / self.system.box
         Masses = np.reshape(self.atoms.masses, [len(self.atoms.masses), 1])
         Basis = np.zeros([Scaled_Pos.shape[0], self.pindices.shape[0]],'f')
         
