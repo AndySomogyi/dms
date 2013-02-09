@@ -245,34 +245,28 @@ else:
     s = system.System(sys.argv[3], "a")
     
     # not help, do one of the commands
-        
+    
     if sys.argv[1] == "mn":
-        os.environ["DMS_DEBUG"] = "TRUE"
         s.begin_timestep()
         s.minimize()
         s.end_timestep()
     elif sys.argv[1] == "eq":
-        os.environ["DMS_DEBUG"] = "TRUE"
         s.begin_timestep()
         s.equilibriate()
         s.end_timestep()
     elif sys.argv[1] == "md":
-        os.environ["DMS_DEBUG"] = "TRUE"
         s.begin_timestep()
         s.md()
         s.end_timestep()
     elif sys.argv[1] == "atomistic_step":
-        os.environ["DMS_DEBUG"] = "TRUE"
         integrator = s.integrator()
         s.begin_timestep()
         integrator.atomistic_step()
         s.end_timestep()
     elif sys.argv[1] == "step":
-        os.environ["DMS_DEBUG"] = "TRUE"
         integrator = s.integrator()
         integrator.step()
     elif sys.argv[1] == "cg_step":
-        os.environ["DMS_DEBUG"] = "TRUE"
         s._load_ts(s.current_timestep)
         integrator = s.integrator()
         s.begin_timestep()
@@ -281,45 +275,31 @@ else:
     elif sys.argv[1] == "run":
         integrator = s.integrator()
         integrator.run()
-        
-elif len(sys.argv) == 3 and sys.argv[1] == "sol":
-    tempfile.tempdir = os.path.curdir
-    s = system.System('test.hdf', "a")
-    
-    if sys.argv[2] == "sol":
-        os.environ["DMS_DEBUG"] = "TRUE"
+    elif sys.argv[2] == "sol":
         s.begin_timestep()
         s.solvate()
-        s.end_timestep()
-        
-    if sys.argv[2] == "mn":
-        os.environ["DMS_DEBUG"] = "TRUE"
+        s.end_timestep()  
+    elif sys.argv[2] == "mn":
         s.begin_timestep()
         sol = s.solvate()
         print("sol: {}".format(sol))
         mn = s.minimize(**sol)
         print("mn: {}".format(mn))
         s.end_timestep()
-        
-    if sys.argv[2] == "eq":
-        os.environ["DMS_DEBUG"] = "TRUE"
+    elif sys.argv[2] == "eq":
         s.begin_timestep()
         sol = s.solvate()
         print("sol: {}".format(sol))
         eq = s.equilibriate(**sol)
         print("eq: {}".format(eq))
         s.end_timestep()
-        
-    if sys.argv[2] == "md":
-        os.environ["DMS_DEBUG"] = "TRUE"
+    elif sys.argv[2] == "md":
         s.begin_timestep()
         sol = s.solvate()
         print("sol: {}".format(sol))
         s.md(**sol)
         s.end_timestep()
-        
-    if sys.argv[2] == "mneq":
-        os.environ["DMS_DEBUG"] = "TRUE"
+    elif sys.argv[2] == "mneq":
         s.begin_timestep()
         sol = s.solvate()
         print("sol: {}".format(sol))
@@ -327,9 +307,8 @@ elif len(sys.argv) == 3 and sys.argv[1] == "sol":
         print("mn: {}".format(mn))
         eq = s.equilibriate(**mn)
         print("eq: {}".format(eq))
-        s.end_timestep()
-        
-    if sys.argv[2] == "mneqmd":
+        s.end_timestep()    
+    elif sys.argv[2] == "mneqmd":
         os.environ["DMS_DEBUG"] = "TRUE"
         s.begin_timestep()
         sol = s.solvate()
@@ -340,5 +319,3 @@ elif len(sys.argv) == 3 and sys.argv[1] == "sol":
         print("eq: {}".format(eq))
         s.md(**eq)
         s.end_timestep()
-"""
-

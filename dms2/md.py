@@ -36,7 +36,6 @@ class MDManager(dict):
     # __slots__ = ("__dict", "dirname")
 
     def __init__(self, *args, **kwargs): 
-        print("__init__")
         super(MDManager,self).__init__(*args, **kwargs)
         
         if not self.has_key("dirname"):
@@ -55,7 +54,6 @@ class MDManager(dict):
         return "MDManager(dirname={}, dict={})".format(self.dirname, super(MDManager,self).__repr__())
     
     def __enter__(self):
-        print("__enter__")
         return self
     
     def __exit__(self, exc_type, exc_value, traceback):
