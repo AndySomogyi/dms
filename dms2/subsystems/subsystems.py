@@ -16,7 +16,10 @@ class SubSystem(object):
     def universe_changed(self, universe):
         """ 
         the universe changed, this occurs in the event of solvation (different number of atoms), 
-        or if there is no solvation, this occurs once on startup.
+        or if there is no solvation, this occurs at least once on startup. 
+        
+        So, __init__ will obviously be called when a new SubSystem derived object is created, then
+        after the universe is created, it will call universe_changed.
         """
         pass
     

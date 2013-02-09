@@ -66,7 +66,7 @@ def FFT_Correlation(x,y):
     corr_yx = ifft(ffty * np.conjugate(fftx), axis=1)
     corr_yx = np.real(fftshift(corr_yx, axes=1))
 
-    corr = 0.5 * (corr_xy[:,length:] + corr_yx[:,length:]) / range(1,length)[::-1])
+    corr = 0.5 * (corr_xy[:,length:] + corr_yx[:,length:]) / range(1,length)[::-1]
     return np.reshape(corr,corr.shape[1])
 
 def vacf(v1, v2, acflen=None):
