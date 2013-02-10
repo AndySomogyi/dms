@@ -7,7 +7,7 @@ Created on Nov 2, 2012
 from numpy import array, ndarray, arange, zeros, convolve, sum, std, mean, cumsum
 from random import randrange
 import h5py #@UnresolvedImport
-import pylab as p
+#import pylab as p
 import numpy as np
 
 def correlation(x1, x2, window=None):

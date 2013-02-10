@@ -161,7 +161,7 @@ def make_parser():
     ap.add_argument("-ndx", default=None, 
                     help="name of index file")
 
-    ap.add_argument("-solvate", dest="solvate", action="store_true",
+    ap.add_argument("-solvate", dest="should_solvate", action="store_true",
                     help="should the system be auto-solvated, if this is set, struct must NOT contain solvent. \
                     defaults to False. This is a boolean flag, to enable, just add \'-solvate\' with no args.")
 
