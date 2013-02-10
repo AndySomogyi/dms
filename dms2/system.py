@@ -931,7 +931,7 @@ def create_config(fid,
             print("using user specified topology file {}".format(top))
 
             filedata_fromfile(TOPOL_TOP, top)
-            filedata_fromfile(POSRES_ITP, POSRES_ITP)
+            filedata_fromfile(POSRES_ITP, posres)
             filedata_fromfile(STRUCT_PDB, struct)
             
             # check to see if solvation is possible

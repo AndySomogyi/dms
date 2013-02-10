@@ -84,13 +84,10 @@ test_structs = {"dpc100":dpc100, "dpc60":dpc60, "dpc5":dpc5}
 
 def make_parser():
     """
-    def create_config(fid,
-                  struct,
-                  box,
-                 
+    Create the argument parser that processes all the DMS command line arguments.
     """
     
-    parser = argparse.ArgumentParser(prog="python -m dms2")
+    parser = argparse.ArgumentParser(prog="python -m dms2", description="DMS - coarse grained Brownian dynamics")
     subparsers = parser.add_subparsers()
 
     # create the config argument parser, lots and lots of junk can be handled
@@ -112,10 +109,10 @@ def make_parser():
                     generated.")
     
     ap.add_argument("-posres", dest="posres", required=False,
-                    help="name of a position restraints file.")
+                    help="name of a position restraints file, optional.")
     
-    ap.add_argument("-temperature", dest="temperature", required=False, type=int, default= 300,
-                    help="the temperature at which to run the simulation.")
+    ap.add_argument("-temperature", dest="temperature", required=False, type=float, default= 300,
+                    help="the temperature at which to run the simulation, defaults to 300K.")
     
     ap.add_argument("-subsystem_factory", dest="subsystem_factory", required=False, 
                     default="dms2.subsystems.RigidSubsystemFactory",
@@ -127,7 +124,9 @@ def make_parser():
     
     ap.add_argument("-subsystem_args", dest="subsystem_args", required=False, 
                     nargs="+", default=[],
-                    help="additional arguments passed to the subsystem factory")
+                    help="a list of additional arguments passed to the subsystem factory, "
+                         "the first item of the list may be the string \'resid unique\', which "
+                         "creates a separate subsystem for each residue." )
     
     ap.add_argument("-integrator", default="dms2.integrators.LangevinIntegrator",
                     help="fully qualified name of the integrator function")
@@ -150,11 +149,17 @@ def make_parser():
     ap.add_argument("-multi", default=1,
                     help="number of parallel MD runs")
     
-    ap.add_argument("-eq_steps", default=10)
-    ap.add_argument("-mn_args", default=system.DEFAULT_MN_ARGS),
-    ap.add_argument("-eq_args", default=system.DEFAULT_EQ_ARGS),
-    ap.add_argument("-md_args", default=system.DEFAULT_MD_ARGS),
-    ap.add_argument("-ndx", default=None)
+    ap.add_argument("-eq_steps", default=10, 
+                    help="number of timesteps to run equilibriation")
+
+    ap.add_argument("-mn_args", default=system.DEFAULT_MN_ARGS, 
+                    help="additional parameters to be changed in the minimization options")
+
+    ap.add_argument("-eq_args", default=system.DEFAULT_EQ_ARGS)
+    ap.add_argument("-md_args", default=system.DEFAULT_MD_ARGS)
+
+    ap.add_argument("-ndx", default=None, 
+                    help="name of index file")
 
     ap.add_argument("-solvate", dest="solvate", action="store_true",
                     help="should the system be auto-solvated, if this is set, struct must NOT contain solvent. \
