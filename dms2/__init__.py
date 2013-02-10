@@ -2,8 +2,6 @@ from system import System, Timestep
 from diffusion import *
 from dynamics import *
 
-print("__init__")
-
 def __check_dependencies():
     import pkg_resources
     mdver = pkg_resources.get_distribution("MDAnalysis").version.split("-")[0].split(".")

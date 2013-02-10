@@ -82,7 +82,7 @@ Au2 = {
 
 test_structs = {"dpc100":dpc100, "dpc60":dpc60, "dpc5":dpc5}
 
-def config_parser():
+def make_parser():
     """
     def create_config(fid,
                   struct,
@@ -90,9 +90,12 @@ def config_parser():
                  
     """
     
+    parser = argparse.ArgumentParser(prog="python -m dms2")
+    subparsers = parser.add_subparsers()
 
-    
-    ap = argparse.ArgumentParser()
+    # create the config argument parser, lots and lots of junk can be handled
+    # by the create config function
+    ap = subparsers.add_parser("config", help="create a simulation database, from which a simulation can be run")
     
     ap.add_argument("-fid", dest="fid", required=True, type=str,
                     help="name of the simulation file to be created.")
@@ -126,7 +129,6 @@ def config_parser():
                     nargs="+", default=[],
                     help="additional arguments passed to the subsystem factory")
     
-    
     ap.add_argument("-integrator", default="dms2.integrators.LangevinIntegrator",
                     help="fully qualified name of the integrator function")
     
@@ -154,22 +156,153 @@ def config_parser():
     ap.add_argument("-md_args", default=system.DEFAULT_MD_ARGS),
     ap.add_argument("-ndx", default=None)
 
-
-    
     ap.add_argument("-solvate", dest="solvate", action="store_true",
                     help="should the system be auto-solvated, if this is set, struct must NOT contain solvent. \
                     defaults to False. This is a boolean flag, to enable, just add \'-solvate\' with no args.")
+
+    ap.set_defaults(__func__=system.create_config)
+
     
-    return ap
+    # Done with config, the MOST complicated command, now make parsers for the more
+    # simple commands
+    ap = subparsers.add_parser("run", help="start or continue a full simulation. "
+                               " This will automatically continue a simulation",)
+    ap.add_argument("sys", help="name of simulation file")
+    def run(sys) :
+        s=system.System(sys, "a")
+        integrator = s.integrator()
+        integrator.run()
+    ap.set_defaults(__func__=run)
 
-run_cmds = ["mn",  "eq",  "md",  "atomistic_step",  "step",  "cg_step",  "run",  "sol",  "mn", "mneq", "mneqmd"]
-        
-def cmd_parser():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('cmd', choices=run_cmds)
+    ap = subparsers.add_parser("sol", help="perform only a solvation")
+    ap.add_argument("sys", help="name of simulation file")
+    def sol(sys) :
+        s=system.System(sys, "a")
+        s.begin_timestep()
+        s.solvate()
+        s.end_timestep()  
+        print(sys)
+    ap.set_defaults(__func__=sol)
 
+    ap = subparsers.add_parser( "mn", help="perform a energy minimization")
+    ap.add_argument("sys", help="name of simulation file")
+    ap.add_argument("-sol", action="store_true", help="auto solvate before minimization")
+    def mn(sys, sol) :
+        s=system.System(sys, "a")
+        s.begin_timestep()
+        if sol:
+            sol = s.solvate()
+            print("sol: {}".format(sol))
+            mn = s.minimize(**sol)
+            print("mn: {}".format(mn))
+            s.end_timestep()
+        else:
+            s.minimize()
+        s.end_timestep()
+    ap.set_defaults(__func__=mn)
+
+    ap = subparsers.add_parser("mneq", help="performs energy minimization followed by equilibriation")
+    ap.add_argument("sys", help="name of simulation file")
+    ap.add_argument("-sol", action="store_true", help="auto solvate between steps")
+    def mneq(sys,sol) :
+        s=system.System(sys, "a")
+        s.begin_timestep()
+        if sol:
+            sol = s.solvate()
+            print("sol: {}".format(sol))
+            mn = s.minimize(**sol)
+            print("mn: {}".format(mn))
+            eq = s.equilibriate(**mn)
+            print("eq: {}".format(eq))
+        else:
+            s.minimize()
+            s.equilibriate()
+        s.end_timestep()    
+    ap.set_defaults(__func__=mneq)
+
+    ap = subparsers.add_parser("mneqmd", help="performs energy minimzatin, equilibriation and molecular dynamics")
+    ap.add_argument("sys", help="name of simulation file")
+    ap.add_argument("-sol", action="store_true", help="auto solvate between steps")
+    def mneqmd(sys,sol) :
+        s=system.System(sys, "a")
+        s.begin_timestep()
+        if sol:
+            sol = s.solvate()
+            print("sol: {}".format(sol))
+            mn = s.minimize(**sol)
+            print("mn: {}".format(mn))
+            eq = s.equilibriate(**mn)
+            print("eq: {}".format(eq))
+            s.md(**eq)
+        else:
+            s.minimize()
+            s.equilibriate()
+            s.md()
+        s.en
+        s.end_timestep()
+    ap.set_defaults(__func__=mneqmd)
+
+    ap = subparsers.add_parser("eq", help="performs an equilibriation")
+    ap.add_argument("sys", help="name of simulation file")
+    ap.add_argument("-sol", action="store_true", help="auto solvate between steps")
+    def eq(sys) :
+        s=system.System(sys, "a")
+        s.begin_timestep()
+        if sol:
+            sol = s.solvate()
+            print("sol: {}".format(sol))
+            eq = s.equilibriate(**sol)
+            print("eq: {}".format(eq))
+        else:
+            s.equilibriate()
+        s.end_timestep()
+    ap.set_defaults(__func__=eq)
+
+    ap = subparsers.add_parser("atomistic_step", help="perform an full atomistic step")
+    ap.add_argument("sys", help="name of simulation file")
+    def atomistic_step(sys) :
+        s=system.System(sys, "a")
+        integrator = s.integrator()
+        s.begin_timestep()
+        integrator.atomistic_step()
+        s.end_timestep()
+    ap.set_defaults(__func__=atomistic_step)
+
+    ap = subparsers.add_parser("step", help="a single complete Langevin step")
+    ap.add_argument("sys", help="name of simulation file")
+    def step(sys) :
+        s=system.System(sys, "a")
+        integrator = s.integrator()
+        integrator.step()
+    ap.set_defaults(__func__=step)
+
+    ap = subparsers.add_parser("md", help="perform ONLY an molecular dynamics step with the starting structure")
+    ap.add_argument("sys", help="name of simulation file")
+    ap.add_argument("-sol", action="store_true", help="auto solvate before md")
+    def md(sys,sol) :
+        s=system.System(sys, "a")
+        s.begin_timestep()
+        if sol:
+            sol = s.solvate()
+            print("sol: {}".format(sol))
+            s.md(**sol)
+        else:
+            s.md()
+        s.end_timestep()
+    ap.set_defaults(__func__=md)
+
+    ap = subparsers.add_parser("cg_step", help="perform just the coarse grained portion of the time step")
+    ap.add_argument("sys", help="name of simulation file")
+    def cg_step(sys) :
+        s=system.System(sys, "a")
+        s._load_ts(s.current_timestep)
+        integrator = s.integrator()
+        s.begin_timestep()
+        integrator.cg_step()
+        s.end_timestep()
+    ap.set_defaults(__func__=cg_step)
+    
     return parser
-
 
 def test(fid,
          struct,
@@ -197,148 +330,24 @@ def test(fid,
     print("hello")
     
 
-commands = {"config":    "full documentation in in config parser above",
-            "run":       "start or continue a full simulation. This will automatically continue\n" + 
-                         "\ta simulation",
-            "sol":       "perform a solvation",
-            "mn":        "perform a energy minimization", 
-            "mneq":      "performs energy minimization followed by equilibriation",
-            "mneqmd":    "performs energy minimzatin, equilibriation and molecular dynamics",
-            "eq":        "performs an equilibriation",
-            "md":        "perform an molecular dynamics step",
-            "atomistic_step":  "perform an full atomistic step",
-            "step":      "perform an full single coarse grained time step",
-            "cg_step":   "forform just the coarse grained portion of the time step"}
 
-def print_command_usage():
-    if sys.argv[1] in commands.keys():
-        print("usage: python -m dms2 {}\n  {}".format(sys.argv[1], commands[sys.argv[1]]))
-        print("required arguments: \n  -sys\tthe name of a valid simulation file, created by a dms2 config command") 
-    else:
-        print("invalid command, valid dms2 commands are {}".format(commands.keys()))
-        
-if len(sys.argv) < 2:
-    print("error, usage python -m dms2 COMMAND [args]")
-    print("valid DMS command are {}".format(commands.keys()))
-    print("for help on any particular DMS command, use python -m dms2 COMMAND -h")
-    sys.exit(-1)
-    
+parser = make_parser()
+args = parser.parse_args()
+print(args)
+func = args.__func__
+del args.__dict__["__func__"]
+func(**args.__dict__)
+
+
+
+
+"""    
 if sys.argv[1] == "config":
     parser = config_parser()
     args=parser.parse_args(sys.argv[2:])
     print(args)
     test(**args.__dict__)
     system.create_config(fid=sys.argv[3], **conf)
-else:
-    # do one of the "simulation" commands, i.e. run a sim, or a single step of a sim.
-    # because of help for each 'command', simpler to manually parse the args
-    if "-h" in sys.argv or "--help" in sys.argv:
-        print_command_usage()
-        sys.exit()
-    if len(sys.argv) <= 3 or sys.argv[2] != "-sys":
-        print("error invalid arguments")
-        print_command_usage()
-        sys.exit(-1)
+        os.environ["DMS_DEBUG"] = "TRUE"
         
-    # make a new system object in APPEND mode.
-    # TODO: some error checking to make sure the file is not already open.    
-    s = system.System(sys.argv[3], "a")
-    
-    # not help, do one of the commands
-        
-    if sys.argv[1] == "mn":
-        os.environ["DMS_DEBUG"] = "TRUE"
-        s.begin_timestep()
-        s.minimize()
-        s.end_timestep()
-    elif sys.argv[1] == "eq":
-        os.environ["DMS_DEBUG"] = "TRUE"
-        s.begin_timestep()
-        s.equilibriate()
-        s.end_timestep()
-    elif sys.argv[1] == "md":
-        os.environ["DMS_DEBUG"] = "TRUE"
-        s.begin_timestep()
-        s.md()
-        s.end_timestep()
-    elif sys.argv[1] == "atomistic_step":
-        os.environ["DMS_DEBUG"] = "TRUE"
-        integrator = s.integrator()
-        s.begin_timestep()
-        integrator.atomistic_step()
-        s.end_timestep()
-    elif sys.argv[1] == "step":
-        os.environ["DMS_DEBUG"] = "TRUE"
-        integrator = s.integrator()
-        integrator.step()
-    elif sys.argv[1] == "cg_step":
-        os.environ["DMS_DEBUG"] = "TRUE"
-        s._load_ts(s.current_timestep)
-        integrator = s.integrator()
-        s.begin_timestep()
-        integrator.cg_step()
-        s.end_timestep()
-    elif sys.argv[1] == "run":
-        integrator = s.integrator()
-        integrator.run()
-        
-elif len(sys.argv) == 3 and sys.argv[1] == "sol":
-    tempfile.tempdir = os.path.curdir
-    s = system.System('test.hdf', "a")
-    
-    if sys.argv[2] == "sol":
-        os.environ["DMS_DEBUG"] = "TRUE"
-        s.begin_timestep()
-        s.solvate()
-        s.end_timestep()
-        
-    if sys.argv[2] == "mn":
-        os.environ["DMS_DEBUG"] = "TRUE"
-        s.begin_timestep()
-        sol = s.solvate()
-        print("sol: {}".format(sol))
-        mn = s.minimize(**sol)
-        print("mn: {}".format(mn))
-        s.end_timestep()
-        
-    if sys.argv[2] == "eq":
-        os.environ["DMS_DEBUG"] = "TRUE"
-        s.begin_timestep()
-        sol = s.solvate()
-        print("sol: {}".format(sol))
-        eq = s.equilibriate(**sol)
-        print("eq: {}".format(eq))
-        s.end_timestep()
-        
-    if sys.argv[2] == "md":
-        os.environ["DMS_DEBUG"] = "TRUE"
-        s.begin_timestep()
-        sol = s.solvate()
-        print("sol: {}".format(sol))
-        s.md(**sol)
-        s.end_timestep()
-        
-    if sys.argv[2] == "mneq":
-        os.environ["DMS_DEBUG"] = "TRUE"
-        s.begin_timestep()
-        sol = s.solvate()
-        print("sol: {}".format(sol))
-        mn = s.minimize(**sol)
-        print("mn: {}".format(mn))
-        eq = s.equilibriate(**mn)
-        print("eq: {}".format(eq))
-        s.end_timestep()
-        
-    if sys.argv[2] == "mneqmd":
-        os.environ["DMS_DEBUG"] = "TRUE"
-        s.begin_timestep()
-        sol = s.solvate()
-        print("sol: {}".format(sol))
-        mn = s.minimize(**sol)
-        print("mn: {}".format(mn))
-        eq = s.equilibriate(**mn)
-        print("eq: {}".format(eq))
-        s.md(**eq)
-        s.end_timestep()
 """
-
