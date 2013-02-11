@@ -116,7 +116,8 @@ def make_parser():
     
     ap.add_argument("-subsystem_factory", dest="subsystem_factory", required=False, 
                     default="dms2.subsystems.RigidSubsystemFactory",
-                    help="fully qualified function name which can create a set of subsystems")
+                    help="fully qualified function name which can create a set of subsystems, "
+                         "can be set to \'dms2.subsystems.LegendreSubsystemFactory\'")
                   
     ap.add_argument("-subsystem_selects", dest="subsystem_selects", required=False, 
                     nargs="+", default=["not resname SOL"],
@@ -129,7 +130,9 @@ def make_parser():
                          "creates a separate subsystem for each residue." )
     
     ap.add_argument("-integrator", default="dms2.integrators.LangevinIntegrator",
-                    help="fully qualified name of the integrator function")
+                    help="fully qualified name of the integrator function, "
+                         "defaults to \'dms2.integrators.LangevinIntegrator\', "
+                         "but the other integrator we provide is \'dms2.integrators.FactorizationIntegrator\'")
     
     ap.add_argument("-integrator_args", default = [],
                     help="additional arguments passed to the integrator function")
