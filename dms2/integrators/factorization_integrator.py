@@ -6,6 +6,7 @@ Created on Jan 30, 2013
 
 import integrator
 import dms2.dynamics as dynamics
+import numpy as np
 
 class FactorizationIntegrator(integrator.Integrator):
     def cg_step(self):
@@ -19,6 +20,14 @@ class FactorizationIntegrator(integrator.Integrator):
         """
         
         # forward euler 
-        cg_translate = self.system.dt * self.system.cg_moment
+        # cg_velocities: nensemble x n subsystem x n_step x n_cg
+        
+        # inner mean: average over ensembles - results in a  n subsystem x n_step x n_cg array
+        # next mean: average over steps - results in a n subsystem x n_cg array
+        # flatten(): makes a 1D array 
+        # [:,np.newaxis]: makes a 1xN column vector.
+        avg_velocities = np.mean(np.mean(self.system.cg_velocities, axis = 0), axis = 1).flatten()[:,np.newaxis]
+        
+        cg_translate = self.system.dt * avg_velocities
         
         self.system.translate(cg_translate)

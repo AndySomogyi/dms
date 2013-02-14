@@ -17,7 +17,6 @@ import subsystems
 import numpy as np
 from scipy.special import legendre
 from scipy.linalg import qr
-import MDAnalysis as md
 
 class LegendreSubsystem(subsystems.SubSystem):
     """
@@ -34,24 +33,24 @@ class LegendreSubsystem(subsystems.SubSystem):
         the atoms that make up this subsystem.
         """
         self.system = system
+        
+        # select statement to get atom group
         self.select = select
+        
+        # polynomial indices, N_cg x 3 matrix.
         self.pindices = pindices
         
         # Atom-related variables
         self.coords = system.atoms.positions
-
-        # CG-related variables
-        self.basis = self.Construct_Basis(self.coords) 
-        self.CG = self.ComputeCG(self.atoms.positions)
-        self.CG_Vel = self.ComputeCG(self.atoms.velocities)
-        self.CG_For = self.ComputeCG_Forces(self.atoms.forces)
         
     def universe_changed(self, universe):
+        """ 
+        universe changed, so select our atom group
+        """
         self.atoms = universe.selectAtoms(self.select)
         
     def frame(self):
-        self.basis = self.Construct_Basis(self.coords)  # Update this every CG step for now
-        
+
         self.CG = self.ComputeCG(self.atoms.positions)
         self.CG_Vel = self.ComputeCG(self.atoms.velocities)
         self.CG_For = self.ComputeCG_Forces(self.atoms.forces)
@@ -68,7 +67,11 @@ class LegendreSubsystem(subsystems.SubSystem):
         pass
 
     def equilibriated(self):
-        pass
+        """
+        this is called just after the structure is equilibriated, this is the starting struct
+        for the MD runs, is this to calculate basis.
+        """
+        self.basis = self.Construct_Basis(self.coords)  # Update this every CG step for now
 
     def ComputeCGInv(self,CG):
         """
@@ -101,12 +104,12 @@ class LegendreSubsystem(subsystems.SubSystem):
         """ 
         ScaledPos = (self.coords - self.atoms.centroid()) / self.system.box
         Masses = np.reshape(self.atoms.masses, [len(self.atoms.masses), 1])
-        Basis = np.zeros([Scaled_Pos.shape[0], self.pindices.shape[0]],'f')
+        Basis = np.zeros([ScaledPos.shape[0], self.pindices.shape[0]],'f')
         
-        for i in xrange(u.shape[1]):
-            px = legendre(self.pindices[i,0])(Scaled_Pos[:,0])
-            py = legendre(self.pindices[i,1])(Scaled_Pos[:,1])
-            pz = legendre(self.pindices[i,2])(Scaled_Pos[:,2])
+        for i in xrange(self.pindices.shape[0]):
+            px = legendre(self.pindices[i,0])(ScaledPos[:,0])
+            py = legendre(self.pindices[i,1])(ScaledPos[:,1])
+            pz = legendre(self.pindices[i,2])(ScaledPos[:,2])
             Basis[:,i] = px * py * pz
             
         WBasis = Basis * np.sqrt(Masses)
@@ -115,29 +118,29 @@ class LegendreSubsystem(subsystems.SubSystem):
         
         return WBasis
 
-    def QR_Decomp(V,dtype):
-        """ 
-        QR_Decomp is an experimental function. Should be eventually deleted.
-        """
-        
-        if dtype is 'normalized':
-            V,R = qr(V, mode='economic')
-        else:
-            n,k = V.shape
+def QR_Decomp(V,dtype):
+    """ 
+    QR_Decomp is an experimental function. Should be eventually deleted.
+    """
+    
+    if dtype is 'normalized':
+        V,R = qr(V, mode='economic')
+    else:
+        n,k = V.shape
 
-            for j in xrange(k):
-                U = V[:,j].copy()
+        for j in xrange(k):
+            U = V[:,j].copy()
 
-                for i in xrange(j):
-                    U -= (dot(V[:,i],V[:,j]) / norm(V[:,i])**2.0) * V[:,i]
+            for i in xrange(j):
+                U -= (np.dot(V[:,i],V[:,j]) / np.linalg.norm(V[:,i])**2.0) * V[:,i]
 
-                V[:,j] = U.copy()
+            V[:,j] = U.copy()
 
-            #normalize U; comment the two lines below for orthogonal GS
-            for j in xrange(k):
-                V[:,j] /= norm(V[:,j])
+        #normalize U; comment the two lines below for orthogonal GS
+        for j in xrange(k):
+            V[:,j] /= np.linalg.norm(V[:,j])
 
-        return V
+    return V
 
 def poly_indexes(psum):
     """
@@ -163,12 +166,19 @@ def LegendreSubsystemFactory(system, selects, *args):
     """
     create a list of LegendreSubsystems.
 
-    @param system
-    @param selects
-    @param args: a list of length 1 or 2. The first element is kmax.
+    @param system: the system that the subsystem belongs to, this may be None
+                   when the simulation file is created. 
+    @param selects: A list of MDAnalysis selection strings, one for each
+                    subsystem. 
+    @param args: a list of length 1 or 2. The first element is kmax, and
+                 the second element may be the string "resid unique", which can be
+                 thought of as an additional selection string. What it does is 
+                 generate a subsystem for each residue. So, for example, select
+                 can be just "resname not SOL", to strip off the solvent, then
+                 if args is [kmax, "resid unique"], an seperate subsystem is
+                 created for each residue. 
     """
     kmax = 0
-    pindices = None
     if len(args) == 1:
         kmax = int(args[0])
     elif len(args) == 2:
@@ -185,7 +195,7 @@ def LegendreSubsystemFactory(system, selects, *args):
     [system.universe.selectAtoms(select) for select in selects]
 
     # create the polynomial indices
-    pindices = poly_indices(kmax)
+    pindices = poly_indexes(kmax)
 
     # the number of CG variables
     # actually, its sufficient to just say nrows * 3 as the 
