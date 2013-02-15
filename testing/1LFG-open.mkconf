@@ -1,0 +1,17 @@
+#!/bin/sh
+
+python -m dms2 config \
+       -fid 1LFG-open.hdf \
+       -struct 1LFG-open.pdb \
+       -posres 1LFG-open.posres.itp \
+       -temperature 285.0 \
+       -subsystem_selects "not segid SOL" \
+       -cg_steps 30 \
+       -dt 10 \
+       -mn_steps 5000 \
+       -eq_steps 500 \
+       -md_steps 2000 \
+       -multi 2 \
+       -subsystem_factory dms2.subsystems.LegendreSubsystemFactory \
+       -subsystem_args 1
+ 

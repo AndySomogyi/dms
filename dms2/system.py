@@ -612,7 +612,7 @@ class System(object):
                     if tsi < self.cg_velocities.shape[2]:
                         for si, s in enumerate(self.subsystems):
                             pos,vel,frc = s.frame()
-                            self.cg_positions       [fi,si,tsi,:] = pos
+                            self.cg_positions [fi,si,tsi,:] = pos
                             self.cg_velocities[fi,si,tsi,:] = vel
                             self.cg_forces    [fi,si,tsi,:] = frc
                             
@@ -803,7 +803,7 @@ DEFAULT_EQ_ARGS = { "mdp":"md_CHARMM27.mdp",  # the default mdp template
 
 def create_config(fid,
                   struct,
-                  box,
+                  box = None,
                   top = None,
                   posres = None,
                   temperature = 300,
@@ -826,6 +826,12 @@ def create_config(fid,
                   **kwargs):
     
     import gromacs
+    
+    # need to create a universe to read various bits for the config, and
+    # to test subsystem creation, so keep it around for this func, 
+    # plus, makeing a universe is a sure fire way to see if we have a valid 
+    # structure.
+    universe = None
     
     with h5py.File(fid, "w") as hdf:
         conf = hdf.create_group("config").attrs
@@ -853,9 +859,22 @@ def create_config(fid,
                           format(keyname, value, typ))
                     raise e
                 
+        # check struct
         try:
-            box = array(box) 
-            print("periodic boundary conditions: {}".format(box))
+            universe = MDAnalysis.Universe(struct)
+            print("structure file {} appears OK".format(struct))
+            filedata_fromfile("struct.pdb", struct)
+        except Exception, e:
+            print("structure file {} is not valid".format(struct))
+            raise e
+                
+        try:
+            if box:
+                box = array(box) 
+                print("user specified periodic boundary conditions: {}".format(box))
+            else:
+                box=universe.trajectory.ts.dimensions[:3]
+                print("using pdb specified periodic boundary conditions: {}".format(box))
             conf[BOX] = box
         except Exception, e:
             print("error reading periodic boundary conditions")
@@ -885,14 +904,7 @@ def create_config(fid,
             print("error creating integrator {}".format(integrator))
             raise e
         
-        # check struct
-        try:
-            gromacs.gmxcheck(f=struct) #@UndefinedVariable
-            print("structure file {} appears OK".format(struct))
-            filedata_fromfile("struct.pdb", struct)
-        except Exception, e:
-            print("structure file {} is not valid".format(struct))
-            raise e
+        
 
         # make a top if we don't have one
         if top is None:
@@ -964,6 +976,7 @@ def create_config(fid,
                 
             # we have a fake sys now, can call subsys factory
             factory = util.get_class(subsystem_factory)
+            print("created subsystem factory {}, attepting to create subsystems...".format(subsystem_factory))
             test_ncgs, test_ss = factory(dummysys, subsystem_selects, *subsystem_args)
             
             print("subsystem factory appears to work, produces {} cg variables for each {} subsystems.".format(test_ncgs, len(test_ss)))

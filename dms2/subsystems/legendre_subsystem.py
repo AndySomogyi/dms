@@ -28,6 +28,10 @@ class LegendreSubsystem(subsystems.SubSystem):
         @param system: an object (typically the system this subsystem belongs to)
         which has the following attributes:
         box: an array describing the periodic boundary conditions.
+        
+        note, the system MAY be None, such as when the config is created, so don't 
+        access it yet. 
+        
         @param pindices: a N*3 array of Legendre polynomial indices. 
         @param select: a select string used for Universe.selectAtoms which selects 
         the atoms that make up this subsystem.
@@ -39,9 +43,6 @@ class LegendreSubsystem(subsystems.SubSystem):
         
         # polynomial indices, N_cg x 3 matrix.
         self.pindices = pindices
-        
-        # Atom-related variables
-        self.coords = system.atoms.positions
         
     def universe_changed(self, universe):
         """ 

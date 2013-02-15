@@ -100,7 +100,7 @@ def make_parser():
     ap.add_argument("-struct", dest="struct", required=True, type=str,
                     help="the starting structure name")
     
-    ap.add_argument("-box", dest="box", required=True, nargs=3, type=float,
+    ap.add_argument("-box", dest="box", required=False, nargs=3, type=float, default=None,
                     help="x,y,z values of the system box in Angstroms")
     
     ap.add_argument("-top", dest="top", required=False, default=None,
