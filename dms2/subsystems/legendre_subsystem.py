@@ -53,7 +53,7 @@ class LegendreSubsystem(subsystems.SubSystem):
     def frame(self):
 
         CG = self.ComputeCG(self.atoms.positions)
-        CG_Vel = self.ComputeCG(self.atoms.velocities)
+        CG_Vel = self.ComputeCG(self.atoms.velocities())
         CG_For = self.ComputeCG_Forces(self.atoms.forces)
 
         return (np.reshape(CG.T,(CG.shape[0]*CG.shape[1])),
@@ -61,7 +61,16 @@ class LegendreSubsystem(subsystems.SubSystem):
                 np.reshape(CG_For.T,(CG_For.shape[0]*CG_For.shape[1])))
 
     def center_of_mass(self, var):
-        return np.dot(var,self.atoms.masses) / np.sum(self.atoms.masses)
+        """ 
+        calculates the mass weighted center of whatever is given. 
+        
+        @param var: a nx3 array
+        @return: a 1x3 array
+        """
+        
+        print("var.shape: {}".format(var.shape))
+        masses = self.atoms.masses()
+        return np.sum(var*masses[:,np.newaxis],axis=0)/self.atoms.totalMass()
         
     def translate(self, values):
         self.atoms.positions += values
@@ -91,7 +100,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         CG = U^t * Mass * var
         var could be atomic positions or velocities 
         """
-        Utw = (self.basis.T * self.atoms.masses)
+        Utw = (self.basis.T * self.atoms.masses())
         
         return 2.0 / self.box * np.dot(Utw,var - self.center_of_mass(var))
         
@@ -109,18 +118,19 @@ class LegendreSubsystem(subsystems.SubSystem):
         although it does not make much sense to me. - Andrew
         """ 
         ScaledPos = 2.0 * coords / self.box
-        Masses = np.reshape(self.atoms.masses, [len(self.atoms.masses), 1])
+        # grab the masses, and make it a column vector
+        Masses = self.atoms.masses()[:,np.newaxis]
         Basis = np.zeros([ScaledPos.shape[0], self.pindices.shape[0]],'f')
         
         for i in xrange(self.pindices.shape[0]):
-            k1, k2, k3 = self.pindices
+            k1, k2, k3 = self.pindices[i,:]
             px = legendre(k1)(ScaledPos[:,0])
             py = legendre(k2)(ScaledPos[:,1])
             pz = legendre(k3)(ScaledPos[:,2])
             Basis[:,i] = np.sqrt(k1 + 0.5) * np.sqrt(k2 + 0.5) * np.sqrt(k3 + 0.5) * px * py * pz
             
         WBasis = Basis * np.sqrt(Masses)
-        WBasis,r = QR_Decomp(WBasis, 'unormalized')    
+        WBasis = QR_Decomp(WBasis, 'unormalized')    
         WBasis /= np.sqrt(Masses)
         
         return WBasis

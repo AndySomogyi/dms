@@ -31,9 +31,9 @@ def diff_from_vel(obj):
     @param src: nensemble * nsubsystem * nframe * ncg
     @return: the diffusion tensor
     """
-    avg_velocities = n.mean(obj.system.cg_velocities, axis = 0)
+    avg_velocities = n.mean(obj.cg_velocities, axis = 0)
     Ncg = avg_velocities.shape[2]
-    dt = obj.system.dt
+    dt = obj.dt
 
     dtensor = n.zeros((avg_velocities.shape[0]*Ncg, avg_velocities.shape[0]*Ncg), 'f')
     
