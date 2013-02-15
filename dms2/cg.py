@@ -7,8 +7,8 @@ functions for calculating coarse grained variables
 '''
 
 from numpy import *
-import MDAnalysis as mda
-import h5py #@UnresolvedImport
+import MDAnalysis as mda            #@UnresolvedImport
+import h5py                         #@UnresolvedImport
 
 def mass_center_periodic(positions, masses, pbc):
     # make a column vector
