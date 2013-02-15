@@ -19,7 +19,7 @@ def mean_force(obj):
 
 def diffusion_force(obj):
     
-    D = diffusion.diffusion(obj)
+    D = diffusion.diff_from_vel(obj)
         
     # self.cg_forces: nensembe x n_subsystem x n_step x n_cg
     # averate over all ensembles, md timesteps, 

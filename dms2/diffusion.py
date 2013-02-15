@@ -26,28 +26,26 @@ def diffusion(obj):
     cg_shape = obj.cg_positions.shape
     return np.diagflat(n.ones(cg_shape[1]*cg_shape[3])*stokes(obj.temperature, r=5))
 
-def diff_from_vel(v, dt):
+def diff_from_vel(obj):
     """
-    @param src: a nframe * nsubsystem * nop * 3 array
+    @param src: nensemble * nsubsystem * nframe * ncg
     @return: the diffusion tensor
     """
-    Nsubsys = v.shape[2]
-    NCG = v.shape[3]
-    Ndim = v.shape[4]
+    avg_velocities = np.mean(obj.system.cg_velocities, axis = 0)
+    Ncg = avg_velocities.shape[2]
+    dt = obj.system.dt
 
-    dtensor = np.zeros([Nsubsys, NCG, Ndim, Nsubsys, NCG, Ndim], 'f')
+    dtensor = np.zeros((avg_velocities.shape[0]*Ncg, avg_velocities.shape[0]*Ncg), 'f')
     
-    for ri in arange(dtensor.shape[0]):
-        for rj in arange(dtensor.shape[1]):
-            for rk in arange(dtensor.shape[2]):
-                dtensor[ri,rj,rk,ri,rj,rk] = diff_from_corr(v[:,:,ri,rj,rk],v[:,:,ri,rj,rk],dt)
+    for ss in arange(avg_velocities.shape[0]):
+        for cg in arange(Ncg):
+            dtensor[ss*Ncg + cg, ss*Ncg + cg] = diff_coef_from_corr(avg_velocities[ss,:,cg],avg_velocities[ss,:,cg],dt)
 
-    size = Nsubsys * NCG * Ndim
-    return np.reshape(dtensor,(size,size))
+    return dtensor
 
-def diff_from_corr(vi, vj, dt, int_points = 4):
+def diff_coef_from_corr(vi, vj, dt, int_points = 4):
     """
-    calculate the diffusion coefecient for a pair of time series vi, vj
+    calculate the diffusion coefficient for a pair of time series vi, vj
     @param vi: an n * nt array of time series
     @param vj: an n * nt array of time series
     sampled at interval dt

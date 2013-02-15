@@ -51,11 +51,13 @@ class LegendreSubsystem(subsystems.SubSystem):
         
     def frame(self):
 
-        self.CG = self.ComputeCG(self.atoms.positions)
-        self.CG_Vel = self.ComputeCG(self.atoms.velocities)
-        self.CG_For = self.ComputeCG_Forces(self.atoms.forces)
+        CG = self.ComputeCG(self.atoms.positions)
+        CG_Vel = self.ComputeCG(self.atoms.velocities)
+        CG_For = self.ComputeCG_Forces(self.atoms.forces)
 
-        return (self.CG, self.CG_Vel, self.CG_For)
+        return (np.reshape(CG.T,(CG.shape[0]*CG.shape[1])),
+                np.reshape(CG_Vel.T,(CG_Vel.shape[0]*CG_Vel.shape[1])),
+                np.reshape(CG_For.T,(CG_For.shape[0]*CG_For.shape[1])))
 
     def center_of_mass(self, var):
         return np.dot(var,self.atoms.masses) / np.sum(self.atoms.masses)
@@ -69,16 +71,16 @@ class LegendreSubsystem(subsystems.SubSystem):
     def equilibriated(self):
         """
         this is called just after the structure is equilibriated, this is the starting struct
-        for the MD runs, is this to calculate basis.
+        for the MD runs, this is to calculate basis.
         """
-        self.basis = self.Construct_Basis(self.coords)  # Update this every CG step for now
+        self.basis = self.Construct_Basis(self.atoms.positions - self.atoms.centerOfMass())  # Update this every CG step for now
 
     def ComputeCGInv(self,CG):
         """
         Computes atomic positions from CG positions
         Using the simplest scheme for now
         """
-        return np.dot(self._Basis,CG)
+        return self.system.box / 2.0 * np.dot(self.basis,CG)
 
     def ComputeCG(self,var):
         """
@@ -88,29 +90,31 @@ class LegendreSubsystem(subsystems.SubSystem):
         """
         Utw = (self.basis.T * self.atoms.masses)
         
-        return np.dot(Utw,var - self.center_of_mass(var))
+        return 2.0 / self.system.box * np.dot(Utw,var - self.center_of_mass(var))
         
-    def ComputeCG_Forces(self,atomic_forces):
+    def ComputeCG_Forces(self, atomic_forces):
         """
         Computes CG forces = U^t * <f>
         for an ensemble average atomic force <f>
         """
-        return np.dot(self.basis.T, atomic_forces)
+        return 2.0 / self.system.box *  np.dot(self.basis.T, atomic_forces)
         
-    def Construct_Basis(self):
+    def Construct_Basis(self,coords):
         """
         Constructs a matrix of orthonormalized legendre basis functions
-        of size 3*Natoms x NCG 
+        of size Natoms x NCG. The implementation closely follows that of SNW,
+        although it does not make much sense to me. - Andrew
         """ 
-        ScaledPos = (self.coords - self.atoms.centroid()) / self.system.box
+        ScaledPos = 2.0 * coords / self.system.box
         Masses = np.reshape(self.atoms.masses, [len(self.atoms.masses), 1])
         Basis = np.zeros([ScaledPos.shape[0], self.pindices.shape[0]],'f')
         
         for i in xrange(self.pindices.shape[0]):
-            px = legendre(self.pindices[i,0])(ScaledPos[:,0])
-            py = legendre(self.pindices[i,1])(ScaledPos[:,1])
-            pz = legendre(self.pindices[i,2])(ScaledPos[:,2])
-            Basis[:,i] = px * py * pz
+            k1, k2, k3 = self.pindices
+            px = legendre(k1)(ScaledPos[:,0])
+            py = legendre(k2)(ScaledPos[:,1])
+            pz = legendre(k3)(ScaledPos[:,2])
+            Basis[:,i] = sqrt(k1 + 0.5) * sqrt(k2 + 0.5) * sqrt(k3 + 0.5) * px * py * pz
             
         WBasis = Basis * np.sqrt(Masses)
         WBasis,r = QR_Decomp(WBasis, 'unormalized')    
@@ -124,7 +128,7 @@ def QR_Decomp(V,dtype):
     """
     
     if dtype is 'normalized':
-        V,R = qr(V, mode='economic')
+        V,R = - qr(V, mode='economic')
     else:
         n,k = V.shape
 
@@ -153,13 +157,14 @@ def poly_indexes(psum):
      [0, 0, 1]]
     Note, the sum of each row is less than or equal to 1.
     """
-    a = []
+    indices = []
+
     for n in range(psum + 1):
         for i in range(n+1):
             for j in range(n+1-i):
-                a.append([n-i-j, j, i])
+                indices.append([n-i-j, j, i])
 
-    return np.array(a,'i')
+    return np.array(indices,'i')
 
 
 def LegendreSubsystemFactory(system, selects, *args):
