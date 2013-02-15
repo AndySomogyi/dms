@@ -9,6 +9,7 @@ from random import randrange
 import h5py #@UnresolvedImport
 #import pylab as p
 import numpy as np
+import numpy.fft as fft
 
 def correlation(x1, x2, window=None):
     """
@@ -60,11 +61,11 @@ def FFT_Correlation(x,y):
     fftx = fft(x, 2 * length - 1, axis=1) #pad with zeros
     ffty = fft(y, 2 * length - 1, axis=1)
 
-    corr_xy = ifft(fftx * np.conjugate(ffty), axis=1)
-    corr_xy = np.real(fftshift(corr_xy, axes=1)) #should be no imaginary part
+    corr_xy = fft.ifft(fftx * np.conjugate(ffty), axis=1)
+    corr_xy = np.real(fft.fftshift(corr_xy, axes=1)) #should be no imaginary part
 
-    corr_yx = ifft(ffty * np.conjugate(fftx), axis=1)
-    corr_yx = np.real(fftshift(corr_yx, axes=1))
+    corr_yx = fft.ifft(ffty * np.conjugate(fftx), axis=1)
+    corr_yx = np.real(fft.fftshift(corr_yx, axes=1))
 
     corr = 0.5 * (corr_xy[:,length:] + corr_yx[:,length:]) / range(1,length)[::-1]
     return np.reshape(corr,corr.shape[1])
@@ -173,46 +174,46 @@ def corr(fname, blocks, what="/0/VELOCITIES", index=0):
     return corr
     
 
-def test(fname, blocks, what="/0/VELOCITIES", index=0):
-    f=h5py.File(fname, 'r')
-    vel = array(f[what])
-    s=vel.shape
-    window = s[2]/blocks
-    corr = zeros(window)
-    for i in arange(s[0]):
-        v1=vel[i,0,:,index]
-        cc=correlation(v1,v1, window)
-        corr += cc
-        p.plot(cc)
-        
-    corr /= float(s[0])
-    print(corr[0])
-    
-    p.plot(corr, '-o')
-    p.show()
-    return corr
-
-def test2(fname, acflen=None, ensemble=0, what="/0/VELOCITIES"):
-    """
-    @param ensemble: index of ensemble
-    """
-    
-    # vel: (100, 1, 5000, 3)
-
-    f=h5py.File(fname, 'r')
-    vel = f[what].value
-    if acflen is None:
-        acflen=vel.shape[2]/2
-    vel = vel[ensemble, 0, :4*acflen, :]
-    #p.plot(vacf(vel,vel,acflen))
-    v=vacf1(vel,vel,acflen)
-    p.plot(v)
-    p.plot(cumsum(v))
-    p.show()
-
-if __name__ == "__main__":
-
-    test2("/home/andy/tmp/C60/out.hdf", 500, 1)
+#def test(fname, blocks, what="/0/VELOCITIES", index=0):
+#    f=h5py.File(fname, 'r')
+#    vel = array(f[what])
+#    s=vel.shape
+#    window = s[2]/blocks
+#    corr = zeros(window)
+#    for i in arange(s[0]):
+#        v1=vel[i,0,:,index]
+#        cc=correlation(v1,v1, window)
+#        corr += cc
+#        p.plot(cc)
+#        
+#    corr /= float(s[0])
+#    print(corr[0])
+#    
+#    p.plot(corr, '-o')
+#    p.show()
+#    return corr
+#
+#def test2(fname, acflen=None, ensemble=0, what="/0/VELOCITIES"):
+#    """
+#    @param ensemble: index of ensemble
+#    """
+#    
+#    # vel: (100, 1, 5000, 3)
+#
+#    f=h5py.File(fname, 'r')
+#    vel = f[what].value
+#    if acflen is None:
+#        acflen=vel.shape[2]/2
+#    vel = vel[ensemble, 0, :4*acflen, :]
+#    #p.plot(vacf(vel,vel,acflen))
+#    v=vacf1(vel,vel,acflen)
+#    p.plot(v)
+#    p.plot(cumsum(v))
+#    p.show()
+#
+#if __name__ == "__main__":
+#
+#    test2("/home/andy/tmp/C60/out.hdf", 500, 1)
 
 
     
