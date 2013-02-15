@@ -3,7 +3,7 @@ Created on Jan 6, 2013
 
 @author: andy
 '''
-import numpy as np
+import numpy as n
 import system
 from numpy.fft import fft, ifft, fftshift
 import correlation as corr
@@ -24,21 +24,21 @@ def diffusion(obj):
 
 
     cg_shape = obj.cg_positions.shape
-    return np.diagflat(n.ones(cg_shape[1]*cg_shape[3])*stokes(obj.temperature, r=5))
+    return n.diagflat(n.ones(cg_shape[1]*cg_shape[3])*stokes(obj.temperature, r=5))
 
 def diff_from_vel(obj):
     """
     @param src: nensemble * nsubsystem * nframe * ncg
     @return: the diffusion tensor
     """
-    avg_velocities = np.mean(obj.system.cg_velocities, axis = 0)
+    avg_velocities = n.mean(obj.system.cg_velocities, axis = 0)
     Ncg = avg_velocities.shape[2]
     dt = obj.system.dt
 
-    dtensor = np.zeros((avg_velocities.shape[0]*Ncg, avg_velocities.shape[0]*Ncg), 'f')
+    dtensor = n.zeros((avg_velocities.shape[0]*Ncg, avg_velocities.shape[0]*Ncg), 'f')
     
-    for ss in arange(avg_velocities.shape[0]):
-        for cg in arange(Ncg):
+    for ss in n.arange(avg_velocities.shape[0]):
+        for cg in n.arange(Ncg):
             dtensor[ss*Ncg + cg, ss*Ncg + cg] = diff_coef_from_corr(avg_velocities[ss,:,cg],avg_velocities[ss,:,cg],dt)
 
     return dtensor
@@ -52,9 +52,9 @@ def diff_coef_from_corr(vi, vj, dt, int_points = 4):
     """
     
     # the velocity correlation function for a time average.
-    corr = np.min(np.array([vi.shape[1],vj.shape[1]]))
+    corr = n.min(n.array([vi.shape[1],vj.shape[1]]))
 
-    for i in np.arange(vi.shape[0]):
+    for i in n.arange(vi.shape[0]):
         corr += corr.FFT_Correlation(vi[i,:],vj[i,:])
         
     # average correlation func        
@@ -64,7 +64,7 @@ def diff_coef_from_corr(vi, vj, dt, int_points = 4):
     # Best to use orthogonal polynomials for fitting
     # the ACs, but for now keep this for comparison
     # with snw. 
-    return np.trapz(corr[:int_points],dx=dt)
+    return n.trapz(corr[:int_points],dx=dt)
 
 def stokes(T, r):
     """
