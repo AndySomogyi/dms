@@ -114,7 +114,7 @@ class LegendreSubsystem(subsystems.SubSystem):
             px = legendre(k1)(ScaledPos[:,0])
             py = legendre(k2)(ScaledPos[:,1])
             pz = legendre(k3)(ScaledPos[:,2])
-            Basis[:,i] = sqrt(k1 + 0.5) * sqrt(k2 + 0.5) * sqrt(k3 + 0.5) * px * py * pz
+            Basis[:,i] = np.sqrt(k1 + 0.5) * np.sqrt(k2 + 0.5) * np.sqrt(k3 + 0.5) * px * py * pz
             
         WBasis = Basis * np.sqrt(Masses)
         WBasis,r = QR_Decomp(WBasis, 'unormalized')    
