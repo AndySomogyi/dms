@@ -73,7 +73,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         this is called just after the structure is equilibriated, this is the starting struct
         for the MD runs, this is to calculate basis.
         """
-        boxboundary = self.select(self.atoms.positions).atoms.bbox()
+        boxboundary = self.atoms.bbox()
         self.box = (boxboundary[1,:] - boxboundary[0,:]) * 0.5
         self.basis = self.Construct_Basis(self.atoms.positions - self.atoms.centerOfMass())  # Update this every CG step for now
 
