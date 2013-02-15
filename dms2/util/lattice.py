@@ -11,7 +11,7 @@ import MDAnalysis as mda
 import gromacs
 import gromacs.setup
 import logging
-import h5py
+import h5py #@UnresolvedImport
 
 
 k=0.0083144621
@@ -125,7 +125,7 @@ def make_index(struct, ndx='main.ndx', oldndx=None):
 
     # pass 1: select
     # empty command '' important to get final list of groups
-    rc,out,nothing = gromacs.make_ndx(f=struct, n=oldndx, o=ndx, stdout=False,
+    rc,out,nothing = gromacs.make_ndx(f=struct, n=oldndx, o=ndx, stdout=False,  #@UndefinedVariable
                                       input=('q'))
     #groups = gromacs.cbook.parse_ndxlist(out)
     #last = len(groups) - 1
@@ -209,12 +209,12 @@ def test2(a,radius,box=100.0,fbase=None):
         t.write(top_src)
         t.write("Au    {}\n".format(pts.shape[0]))
         
-    gromacs.genbox(p=top, cp=struct, cs="spc216.gro", o=sol, vdwd="0.15")
+    gromacs.genbox(p=top, cp=struct, cs="spc216.gro", o=sol, vdwd="0.15")       #@UndefinedVariable
     
-    rc,out,nothing = gromacs.make_ndx(f=sol, n=None, o=ndx, stdout=False,
-                                      input=('', '', 'q'))
+    rc,out,nothing = gromacs.make_ndx(f=sol, n=None, o=ndx, stdout=False,       #@UndefinedVariable
+                                      input=('', '', 'q')) 
     
-    gromacs.grompp(f="md2.mdp", o="{}.tpr".format(fbase), c=sol, p=top, n=ndx)
+    gromacs.grompp(f="md2.mdp", o="{}.tpr".format(fbase), c=sol, p=top, n=ndx)  #@UndefinedVariable
     
     with file("{}.sh".format(fbase), "w") as f:
         f.write("#!/bin/bash\n")
@@ -237,7 +237,7 @@ def test3():
         sol = "{}.sol.pdb".format(fbase)
         ndx = "{}.ndx".format(fbase)
         print(top,sol,ndx)
-        gromacs.grompp(f="md3.mdp", o="{}.tpr".format(fbase), c=sol, p=top, n=ndx)
+        gromacs.grompp(f="md3.mdp", o="{}.tpr".format(fbase), c=sol, p=top, n=ndx) #@UndefinedVariable
         
 def make_tpr(box, rrange):
     
@@ -249,7 +249,7 @@ def make_tpr(box, rrange):
         sol = "{}.sol.pdb".format(fbase)
         ndx = "{}.ndx".format(fbase)
     
-        gromacs.grompp(f="md2.mdp", o="{}.tpr".format(fbase), c=sol, p=top, n=ndx)
+        gromacs.grompp(f="md2.mdp", o="{}.tpr".format(fbase), c=sol, p=top, n=ndx) #@UndefinedVariable
         
 def merge_hdf(gpat, out):
     import os.path
