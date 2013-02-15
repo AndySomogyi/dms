@@ -73,6 +73,8 @@ class LegendreSubsystem(subsystems.SubSystem):
         this is called just after the structure is equilibriated, this is the starting struct
         for the MD runs, this is to calculate basis.
         """
+        boxboundary = self.select(self.atoms.positions).atoms.bbox()
+        self.box = (boxboundary[1,:] - boxboundary[0,:]) * 0.5
         self.basis = self.Construct_Basis(self.atoms.positions - self.atoms.centerOfMass())  # Update this every CG step for now
 
     def ComputeCGInv(self,CG):
@@ -80,7 +82,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         Computes atomic positions from CG positions
         Using the simplest scheme for now
         """
-        return self.system.box / 2.0 * np.dot(self.basis,CG)
+        return self.box / 2.0 * np.dot(self.basis,CG)
 
     def ComputeCG(self,var):
         """
@@ -90,14 +92,14 @@ class LegendreSubsystem(subsystems.SubSystem):
         """
         Utw = (self.basis.T * self.atoms.masses)
         
-        return 2.0 / self.system.box * np.dot(Utw,var - self.center_of_mass(var))
+        return 2.0 / self.box * np.dot(Utw,var - self.center_of_mass(var))
         
     def ComputeCG_Forces(self, atomic_forces):
         """
         Computes CG forces = U^t * <f>
         for an ensemble average atomic force <f>
         """
-        return 2.0 / self.system.box *  np.dot(self.basis.T, atomic_forces)
+        return 2.0 / self.box *  np.dot(self.basis.T, atomic_forces)
         
     def Construct_Basis(self,coords):
         """
@@ -105,7 +107,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         of size Natoms x NCG. The implementation closely follows that of SNW,
         although it does not make much sense to me. - Andrew
         """ 
-        ScaledPos = 2.0 * coords / self.system.box
+        ScaledPos = 2.0 * coords / self.box
         Masses = np.reshape(self.atoms.masses, [len(self.atoms.masses), 1])
         Basis = np.zeros([ScaledPos.shape[0], self.pindices.shape[0]],'f')
         
