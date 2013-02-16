@@ -9,9 +9,10 @@ python -m dms2 config \
        -cg_steps 30 \
        -dt 10 \
        -mn_steps 5000 \
-       -eq_steps 500 \
-       -md_steps 2000 \
+       -eq_steps 100 \
+       -md_steps 500 \
        -multi 2 \
+       -integrator dms2.integrators.FactorizationIntegrator \
        -subsystem_factory dms2.subsystems.LegendreSubsystemFactory \
        -subsystem_args 1
  
