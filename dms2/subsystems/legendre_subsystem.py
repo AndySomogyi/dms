@@ -17,6 +17,7 @@ import subsystems
 import numpy as np
 from scipy.special import legendre
 from scipy.linalg import qr
+import logging
 
 class LegendreSubsystem(subsystems.SubSystem):
     """
@@ -43,6 +44,9 @@ class LegendreSubsystem(subsystems.SubSystem):
         
         # polynomial indices, N_cg x 3 matrix.
         self.pindices = pindices
+
+        logging.info("created LegendreSubsystem, pindices: {}, select: {}".
+                     format(pindices, select))
         
     def universe_changed(self, universe):
         """ 
@@ -67,8 +71,6 @@ class LegendreSubsystem(subsystems.SubSystem):
         @param var: a nx3 array
         @return: a 1x3 array
         """
-        
-        print("var.shape: {}".format(var.shape))
         masses = self.atoms.masses()
         return np.sum(var*masses[:,np.newaxis],axis=0)/self.atoms.totalMass()
         
@@ -101,7 +103,6 @@ class LegendreSubsystem(subsystems.SubSystem):
         var could be atomic positions or velocities 
         """
         Utw = (self.basis.T * self.atoms.masses())
-        
         return 2.0 / self.box * np.dot(Utw,var - self.center_of_mass(var))
         
     def ComputeCG_Forces(self, atomic_forces):
@@ -210,6 +211,7 @@ def LegendreSubsystemFactory(system, selects, *args):
         raise ValueError("invalid args")
             
     # test to see if the generated selects work
+    # this will throw an exception on failure, do nothing on success.
     [system.universe.selectAtoms(select) for select in selects]
 
     # create the polynomial indices
