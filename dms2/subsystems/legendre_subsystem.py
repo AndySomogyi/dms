@@ -164,7 +164,7 @@ def QR_Decomp(V,dtype):
 
     return V
 
-def poly_indexes(OPn, kmax):
+def poly_indexes(CGOrder, kmax):
     """
     Create 2D array of Legendre polynomial indices with index sum <= psum. 
 
@@ -182,10 +182,10 @@ def poly_indexes(OPn, kmax):
     indices.append(array([0,1,0],'int'))
     indices.append(array([1,0,0],'int'))
     
-    for i in range(OPn+1):
-        for j in range(OPn+1):
-                for k in range(OPn+1):
-                        if i+j+k <= kmax and i+j+k > 1:
+    for i in range(CGOrder+1):
+        for j in range(CGOrder+1):
+                for k in range(CGOrder+1):
+                        if i +j+k <= kmax and i+j+k > 1:
                             indices.append(array([i,j,k],'int'))
 
     return np.array(indices,'i')
@@ -208,11 +208,12 @@ def LegendreSubsystemFactory(system, selects, *args):
                  created for each residue. 
     """
     kmax = 0
-    if len(args) == 1:
-        kmax = int(args[0])
-    elif len(args) == 2:
-        kmax = int(args[0])
-        toks = str(args[0]).split()
+    
+    if len(args) == 2:
+        CGOrder, kmax = int(args[0]), int(args[1])
+    elif len(args) == 3:
+        CGOrder, kmax = int(args[0]), int(args[1])
+        toks = str(args[1]).split()
         if len(toks) == 2 and toks[0].lower() == "resid" and toks[1].lower() == "unique":
             groups = [system.universe.selectAtoms(s) for s in selects]
             resids = [resid for g in groups for resid in g.resids()]
@@ -225,7 +226,7 @@ def LegendreSubsystemFactory(system, selects, *args):
     [system.universe.selectAtoms(select) for select in selects]
 
     # create the polynomial indices
-    pindices = poly_indexes(kmax)
+    pindices = poly_indexes(CGOrder,kmax)
 
     # the number of CG variables
     # actually, its sufficient to just say nrows * 3 as the 
