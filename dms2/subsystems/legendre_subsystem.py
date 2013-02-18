@@ -53,12 +53,16 @@ class LegendreSubsystem(subsystems.SubSystem):
         universe changed, so select our atom group
         """
         self.atoms = universe.selectAtoms(self.select)
+
+    def ComputeResiduals(self,CG):
+        return self.atoms.positions - (ComputeCGInv(CG) + self.atoms.centerOfMass())
         
     def frame(self):
 
         CG = self.ComputeCG(self.atoms.positions)
         CG_Vel = self.ComputeCG(self.atoms.velocities())
         CG_For = self.ComputeCG_Forces(self.atoms.forces)
+        self.residuals = ComputeResiduals(CG)
 
         return (np.reshape(CG.T,(CG.shape[0]*CG.shape[1])),
                 np.reshape(CG_Vel.T,(CG_Vel.shape[0]*CG_Vel.shape[1])),
@@ -160,7 +164,7 @@ def QR_Decomp(V,dtype):
 
     return V
 
-def poly_indexes(psum):
+def poly_indexes(OPn, kmax):
     """
     Create 2D array of Legendre polynomial indices with index sum <= psum. 
 
@@ -173,10 +177,16 @@ def poly_indexes(psum):
     """
     indices = []
 
-    for n in range(psum + 1):
-        for i in range(n+1):
-            for j in range(n+1-i):
-                indices.append([n-i-j, j, i])
+    indices.append(array([0,0,0],'int'))
+    indices.append(array([0,0,1],'int'))
+    indices.append(array([0,1,0],'int'))
+    indices.append(array([1,0,0],'int'))
+    
+    for i in range(OPn+1):
+        for j in range(OPn+1):
+                for k in range(OPn+1):
+                        if i+j+k <= kmax and i+j+k > 1:
+                            indices.append(array([i,j,k],'int'))
 
     return np.array(indices,'i')
 
