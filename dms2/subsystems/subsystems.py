@@ -31,6 +31,13 @@ class SubSystem(object):
         pass
     
     def translate(self, values):
+        """
+        Translates ALL atomic positions given a coarse grained variable.
+        
+        For example, if the CG variable is center of mass, then translate would
+        be given a 1x3 vector which represents how much to shift the center of mass, 
+        then the subsystem would simply ADD this value to ALL atomic positions. 
+        """
         pass
     
     def minimized(self):
