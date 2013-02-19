@@ -79,6 +79,12 @@ class LegendreSubsystem(subsystems.SubSystem):
         return np.sum(var*masses[:,np.newaxis],axis=0)/self.atoms.totalMass()
         
     def translate(self, CG):
+        """
+        translates the atomic positions from a given vectory of CG positions,
+        and then adds the residuals for higher accuracy.
+        
+        @param CG: a 3*n_cg x 1 array 
+        """
         self.atoms.positions = ComputeCGInv(CG) + self.atoms.centerOfMass()
         self.atoms.positions += self.residuals
         
@@ -98,8 +104,15 @@ class LegendreSubsystem(subsystems.SubSystem):
         """
         Computes atomic positions from CG positions
         Using the simplest scheme for now
+        @param CG: 3*n_cg x 1 array
+        @return: a n_atom x 3array
         """
-        return self.box / 2.0 * np.dot(self.basis,CG)
+        NCG = CG.shape[0]/3
+        x = self.box[0] / 2.0 * np.dot(self.basis,CG[:NCG])
+        y = self.box[1] / 2.0 * np.dot(self.basis,CG[NCG:2*NCG])
+        z = self.box[2] / 2.0 * np.dot(self.basis,CG[2*NCG:3*NCG])
+        
+        return np.array([x,y,z]).T
 
     def ComputeCG(self,var):
         """
@@ -200,13 +213,13 @@ def LegendreSubsystemFactory(system, selects, *args):
                    when the simulation file is created. 
     @param selects: A list of MDAnalysis selection strings, one for each
                     subsystem. 
-    @param args: a list of length 1 or 2. The first element is kmax, and
-                 the second element may be the string "resid unique", which can be
-                 thought of as an additional selection string. What it does is 
-                 generate a subsystem for each residue. So, for example, select
-                 can be just "resname not SOL", to strip off the solvent, then
-                 if args is [kmax, "resid unique"], an seperate subsystem is
-                 created for each residue. 
+    @param args: a list of length 2 or 3. The first element is the order of CG,
+                 the second is kmax, and the third element may be the string 
+                 "resid unique", which can be thought of as an additional 
+                 selection string. What it does is generate a subsystem for 
+                 each residue. So, for example, select can be just "resname not SOL",
+                 to strip off the solvent, then if args is [kmax, "resid unique"], 
+                 an seperate subsystem is created for each residue. 
     """
     kmax = 0
     
@@ -214,7 +227,7 @@ def LegendreSubsystemFactory(system, selects, *args):
         CGOrder, kmax = int(args[0]), int(args[1])
     elif len(args) == 3:
         CGOrder, kmax = int(args[0]), int(args[1])
-        toks = str(args[1]).split()
+        toks = str(args[2]).split()
         if len(toks) == 2 and toks[0].lower() == "resid" and toks[1].lower() == "unique":
             groups = [system.universe.selectAtoms(s) for s in selects]
             resids = [resid for g in groups for resid in g.resids()]
