@@ -67,19 +67,16 @@ class LegendreSubsystem(subsystems.SubSystem):
         return (np.reshape(CG.T,(CG.shape[0]*CG.shape[1])),
                 np.reshape(CG_Vel.T,(CG_Vel.shape[0]*CG_Vel.shape[1])),
                 np.reshape(CG_For.T,(CG_For.shape[0]*CG_For.shape[1])))
-
-    def center_of_mass(self, var):
-        """ 
-        calculates the mass weighted center of whatever is given. 
         
-        @param var: a nx3 array
-        @return: a 1x3 array
+    def translate(self, CG):
         """
-        masses = self.atoms.masses()
-        return np.sum(var*masses[:,np.newaxis],axis=0)/self.atoms.totalMass()
+        translates the atomic positions from a given vectory of CG positions,
+        and then adds the residuals for higher accuracy.
         
-    def translate(self, values):
-        self.atoms.positions += values
+        @param CG: a 3*n_cg x 1 array 
+        """
+        self.atoms.positions = ComputeCGInv(CG)
+        self.atoms.positions += self.residuals
         
     def minimized(self):
         pass
@@ -97,8 +94,15 @@ class LegendreSubsystem(subsystems.SubSystem):
         """
         Computes atomic positions from CG positions
         Using the simplest scheme for now
+        @param CG: 3*n_cg x 1 array
+        @return: a n_atom x 3array
         """
-        return self.box / 2.0 * np.dot(self.basis,CG)
+        NCG = CG.shape[0]/3
+        x = self.box[0] / 2.0 * np.dot(self.basis,CG[:NCG])
+        y = self.box[1] / 2.0 * np.dot(self.basis,CG[NCG:2*NCG])
+        z = self.box[2] / 2.0 * np.dot(self.basis,CG[2*NCG:3*NCG])
+        
+        return np.array([x,y,z]).T
 
     def ComputeCG(self,var):
         """
@@ -106,8 +110,8 @@ class LegendreSubsystem(subsystems.SubSystem):
         CG = U^t * Mass * var
         var could be atomic positions or velocities 
         """
-        Utw = (self.basis.T * self.atoms.masses())
-        return 2.0 / self.box * np.dot(Utw,var - self.center_of_mass(var))
+        Utw = self.basis.T * self.atoms.masses()
+        return 2.0 / self.box * np.dot(Utw,var)
         
     def ComputeCG_Forces(self, atomic_forces):
         """
@@ -135,7 +139,7 @@ class LegendreSubsystem(subsystems.SubSystem):
             Basis[:,i] = np.sqrt(k1 + 0.5) * np.sqrt(k2 + 0.5) * np.sqrt(k3 + 0.5) * px * py * pz
             
         WBasis = Basis * np.sqrt(Masses)
-        WBasis = QR_Decomp(WBasis, 'unormalized')    
+        WBasis = QR_Decomp(WBasis, 'unormalized')
         WBasis /= np.sqrt(Masses)
         
         return WBasis
@@ -177,10 +181,10 @@ def poly_indexes(CGOrder, kmax):
     """
     indices = []
 
-    indices.append(array([0,0,0],'int'))
-    indices.append(array([0,0,1],'int'))
-    indices.append(array([0,1,0],'int'))
-    indices.append(array([1,0,0],'int'))
+    indices.append(np.array([0,0,0],'int'))
+    indices.append(np.array([0,0,1],'int'))
+    indices.append(np.array([0,1,0],'int'))
+    indices.append(np.array([1,0,0],'int'))
     
     for i in range(CGOrder+1):
         for j in range(CGOrder+1):
@@ -199,13 +203,13 @@ def LegendreSubsystemFactory(system, selects, *args):
                    when the simulation file is created. 
     @param selects: A list of MDAnalysis selection strings, one for each
                     subsystem. 
-    @param args: a list of length 1 or 2. The first element is kmax, and
-                 the second element may be the string "resid unique", which can be
-                 thought of as an additional selection string. What it does is 
-                 generate a subsystem for each residue. So, for example, select
-                 can be just "resname not SOL", to strip off the solvent, then
-                 if args is [kmax, "resid unique"], an seperate subsystem is
-                 created for each residue. 
+    @param args: a list of length 2 or 3. The first element is the order of CG,
+                 the second is kmax, and the third element may be the string 
+                 "resid unique", which can be thought of as an additional 
+                 selection string. What it does is generate a subsystem for 
+                 each residue. So, for example, select can be just "resname not SOL",
+                 to strip off the solvent, then if args is [kmax, "resid unique"], 
+                 an seperate subsystem is created for each residue. 
     """
     kmax = 0
     
@@ -213,7 +217,7 @@ def LegendreSubsystemFactory(system, selects, *args):
         CGOrder, kmax = int(args[0]), int(args[1])
     elif len(args) == 3:
         CGOrder, kmax = int(args[0]), int(args[1])
-        toks = str(args[1]).split()
+        toks = str(args[2]).split()
         if len(toks) == 2 and toks[0].lower() == "resid" and toks[1].lower() == "unique":
             groups = [system.universe.selectAtoms(s) for s in selects]
             resids = [resid for g in groups for resid in g.resids()]
