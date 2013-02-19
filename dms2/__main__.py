@@ -127,7 +127,13 @@ def make_parser():
                     nargs="+", default=[],
                     help="a list of additional arguments passed to the subsystem factory, "
                          "the first item of the list may be the string \'resid unique\', which "
-                         "creates a separate subsystem for each residue." )
+                         "creates a separate subsystem for each residue. " 
+                         ""
+                         "The most comonly used subsystem is dms2.subsystems.LegendreSubsystemFactory, "
+                         "The args for this subsystem are [kmax, OPTIONAL(\"resid unique\")], "
+                         "kmax is the highest Legendre polynomial index to use, "
+                         "and the last arg is the optional string \"resid unique\" to make a unique "
+                         "subsystem for each residue." )
     
     ap.add_argument("-integrator", default="dms2.integrators.LangevinIntegrator",
                     help="fully qualified name of the integrator function, "

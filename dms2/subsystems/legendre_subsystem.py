@@ -55,14 +55,14 @@ class LegendreSubsystem(subsystems.SubSystem):
         self.atoms = universe.selectAtoms(self.select)
 
     def ComputeResiduals(self,CG):
-        return self.atoms.positions - (ComputeCGInv(CG) + self.atoms.centerOfMass())
+        return self.atoms.positions - (self.ComputeCGInv(CG) + self.atoms.centerOfMass())
         
     def frame(self):
 
         CG = self.ComputeCG(self.atoms.positions)
         CG_Vel = self.ComputeCG(self.atoms.velocities())
         CG_For = self.ComputeCG_Forces(self.atoms.forces)
-        self.residuals = ComputeResiduals(CG)
+        self.residuals = self.ComputeResiduals(CG)
 
         return (np.reshape(CG.T,(CG.shape[0]*CG.shape[1])),
                 np.reshape(CG_Vel.T,(CG_Vel.shape[0]*CG_Vel.shape[1])),
@@ -75,8 +75,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         
         @param CG: a 3*n_cg x 1 array 
         """
-        self.atoms.positions = ComputeCGInv(CG)
-        self.atoms.positions += self.residuals
+        self.atoms.positions = self.ComputeCGInv(CG) + self.residuals
         
     def minimized(self):
         pass
@@ -168,7 +167,7 @@ def QR_Decomp(V,dtype):
 
     return V
 
-def poly_indexes(CGOrder, kmax):
+def poly_indexes(kmax):
     """
     Create 2D array of Legendre polynomial indices with index sum <= psum. 
 
@@ -181,19 +180,12 @@ def poly_indexes(CGOrder, kmax):
     """
     indices = []
 
-    indices.append(np.array([0,0,0],'int'))
-    indices.append(np.array([0,0,1],'int'))
-    indices.append(np.array([0,1,0],'int'))
-    indices.append(np.array([1,0,0],'int'))
-    
-    for i in range(CGOrder+1):
-        for j in range(CGOrder+1):
-                for k in range(CGOrder+1):
-                        if i +j+k <= kmax and i+j+k > 1:
-                            indices.append(array([i,j,k],'int'))
-
+    for n in range(kmax + 1):
+        for i in range(n+1):
+            for j in range(n+1-i):
+                indices.append([n-i-j, j, i])
+                
     return np.array(indices,'i')
-
 
 def LegendreSubsystemFactory(system, selects, *args):
     """
@@ -203,21 +195,20 @@ def LegendreSubsystemFactory(system, selects, *args):
                    when the simulation file is created. 
     @param selects: A list of MDAnalysis selection strings, one for each
                     subsystem. 
-    @param args: a list of length 2 or 3. The first element is the order of CG,
-                 the second is kmax, and the third element may be the string 
-                 "resid unique", which can be thought of as an additional 
-                 selection string. What it does is generate a subsystem for 
-                 each residue. So, for example, select can be just "resname not SOL",
-                 to strip off the solvent, then if args is [kmax, "resid unique"], 
-                 an seperate subsystem is created for each residue. 
+    @param args: a list of length 1 or 2. The first element is kmax, and
+                 the second element may be the string "resid unique", which can be
+                 thought of as an additional selection string. What it does is 
+                 generate a subsystem for each residue. So, for example, select
+                 can be just "resname not SOL", to strip off the solvent, then
+                 if args is [kmax, "resid unique"], an seperate subsystem is
+                 created for each residue. 
     """
     kmax = 0
-    
-    if len(args) == 2:
-        CGOrder, kmax = int(args[0]), int(args[1])
-    elif len(args) == 3:
-        CGOrder, kmax = int(args[0]), int(args[1])
-        toks = str(args[2]).split()
+    if len(args) == 1:
+        kmax = int(args[0])
+    elif len(args) == 2:
+        kmax = int(args[0])
+        toks = str(args[0]).split()
         if len(toks) == 2 and toks[0].lower() == "resid" and toks[1].lower() == "unique":
             groups = [system.universe.selectAtoms(s) for s in selects]
             resids = [resid for g in groups for resid in g.resids()]
@@ -226,11 +217,10 @@ def LegendreSubsystemFactory(system, selects, *args):
         raise ValueError("invalid args")
             
     # test to see if the generated selects work
-    # this will throw an exception on failure, do nothing on success.
     [system.universe.selectAtoms(select) for select in selects]
 
     # create the polynomial indices
-    pindices = poly_indexes(CGOrder,kmax)
+    pindices = poly_indexes(kmax)
 
     # the number of CG variables
     # actually, its sufficient to just say nrows * 3 as the 
