@@ -78,8 +78,9 @@ class LegendreSubsystem(subsystems.SubSystem):
         masses = self.atoms.masses()
         return np.sum(var*masses[:,np.newaxis],axis=0)/self.atoms.totalMass()
         
-    def translate(self, values):
-        self.atoms.positions += values
+    def translate(self, CG):
+        self.atoms.positions = ComputeCGInv(CG) + self.atoms.centerOfMass()
+        self.atoms.positions += self.residuals
         
     def minimized(self):
         pass
@@ -177,10 +178,10 @@ def poly_indexes(CGOrder, kmax):
     """
     indices = []
 
-    indices.append(array([0,0,0],'int'))
-    indices.append(array([0,0,1],'int'))
-    indices.append(array([0,1,0],'int'))
-    indices.append(array([1,0,0],'int'))
+    indices.append(np.array([0,0,0],'int'))
+    indices.append(np.array([0,0,1],'int'))
+    indices.append(np.array([0,1,0],'int'))
+    indices.append(np.array([1,0,0],'int'))
     
     for i in range(CGOrder+1):
         for j in range(CGOrder+1):
