@@ -67,16 +67,6 @@ class LegendreSubsystem(subsystems.SubSystem):
         return (np.reshape(CG.T,(CG.shape[0]*CG.shape[1])),
                 np.reshape(CG_Vel.T,(CG_Vel.shape[0]*CG_Vel.shape[1])),
                 np.reshape(CG_For.T,(CG_For.shape[0]*CG_For.shape[1])))
-
-    def center_of_mass(self, var):
-        """ 
-        calculates the mass weighted center of whatever is given. 
-        
-        @param var: a nx3 array
-        @return: a 1x3 array
-        """
-        masses = self.atoms.masses()
-        return np.sum(var*masses[:,np.newaxis],axis=0)/self.atoms.totalMass()
         
     def translate(self, CG):
         """
@@ -85,7 +75,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         
         @param CG: a 3*n_cg x 1 array 
         """
-        self.atoms.positions = ComputeCGInv(CG) + self.atoms.centerOfMass()
+        self.atoms.positions = ComputeCGInv(CG)
         self.atoms.positions += self.residuals
         
     def minimized(self):
@@ -120,8 +110,8 @@ class LegendreSubsystem(subsystems.SubSystem):
         CG = U^t * Mass * var
         var could be atomic positions or velocities 
         """
-        Utw = (self.basis.T * self.atoms.masses())
-        return 2.0 / self.box * np.dot(Utw,var - self.center_of_mass(var))
+        Utw = self.basis.T * self.atoms.masses()
+        return 2.0 / self.box * np.dot(Utw,var)
         
     def ComputeCG_Forces(self, atomic_forces):
         """
@@ -149,7 +139,7 @@ class LegendreSubsystem(subsystems.SubSystem):
             Basis[:,i] = np.sqrt(k1 + 0.5) * np.sqrt(k2 + 0.5) * np.sqrt(k3 + 0.5) * px * py * pz
             
         WBasis = Basis * np.sqrt(Masses)
-        WBasis = QR_Decomp(WBasis, 'unormalized')    
+        WBasis = QR_Decomp(WBasis, 'unormalized')
         WBasis /= np.sqrt(Masses)
         
         return WBasis
