@@ -1,7 +1,7 @@
 #!/bin/sh
 
 python -m dms2 config \
-       -fid 1LFG-open.hdf \
+       -o 1LFG-open.hdf \
        -struct 1LFG-open.pdb \
        -posres 1LFG-open.posres.itp \
        -temperature 285.0 \

@@ -17,6 +17,14 @@ DMS_TMPDIR : "."
 from pkg_resources import resource_filename, resource_listdir  #@UnresolvedImport
 import os
 
+from numpy import array, fromfile, uint8
+import tempfile
+import MDAnalysis                       #@UnresolvedImport
+import h5py                             #@UnresolvedImport
+import md
+import util
+import collections
+
 
 def _generate_template_dict(dirname):
     """
@@ -55,33 +63,306 @@ All template filenames are stored in
 :data:`dms2.config.templates`. Templates have to be extracted from
 the dms2 python egg file because they are used by external
 code: find the actual file locations from this variable.
-
-**Gromacs mdp templates**
-
-These are supplied as examples and there is **NO GUARANTEE THAT THEY
-PRODUCE SENSIBLE OUTPUT** --- check for yourself!  Note that only
-existing parameter names can be modified with
-:func:`gromacs.cbook.edit_mdp` at the moment; if in doubt add the
-parameter with its gromacs default value (or empty values) and
-modify later with :func:`~gromacs.cbook.edit_mdp`.
-
-The safest bet is to use one of the ``mdout.mdp`` files produced by
-:func:`gromacs.grompp` as a template as this mdp contains all
-parameters that are legal in the current version of Gromacs.
-
-**Queuing system templates**
-
-The queing system scripts are highly specific and you will need to add your
-own into :data:`gromacs.config.qscriptdir`.
-See :mod:`gromacs.qsub` for the format and how these files are processed.
 """
-
-
-
 
 
 # Initialized the dms enviornment variables
 DMS_TMPDIR = "."
+
+
+"""
+Botlzmann's constant in kJ/mol/K
+"""
+KB = 0.0083144621
+
+
+CURRENT_TIMESTEP = "current_timestep" 
+SRC_FILES = "src_files"
+FILE_DATA_LIST = ["struct.pdb", "topol.top", "index.ndx", "posres.itp"]
+TIMESTEPS = "timesteps"
+CONFIG = "config"
+STRUCT_PDB = "struct.pdb"
+TOPOL_TOP = "topol.top"
+INDEX_NDX = "index.ndx"
+CG_STEPS = "cg_steps"
+MN_STEPS = "mn_steps"
+EQ_STEPS = "eq_steps"
+MD_STEPS = "md_steps"
+
+# All values are stored in the hdf file, however there is no direct
+# way to store a python dict in hdf, so we need to store it as
+# a set of key / value lists.
+# This is a bit hackish, but to store them as lists, the following
+# 'key names' will have '_keys' and '_values' automatically appended
+# to them, then the corresponding keys / values will be stored as 
+# such. 
+MN_ARGS = "mn_args"
+EQ_ARGS = "eq_args"
+MD_ARGS = "md_args"
+KEYS="_keys"
+VALUES="_values"
+MULTI= "multi"
+SHOULD_SOLVATE="should_solvate"
+POSRES_ITP="posres.itp"
+SUBSYSTEM_FACTORY = "subsystem_factory"
+SUBSYSTEM_SELECTS = "subsystem_selects"
+SUBSYSTEM_ARGS = "subsystem_args"
+NSTXOUT = "nstxout"
+NSTVOUT = "nstvout"
+NSTFOUT = "nstfout"
+BOX = "box"
+TEMPERATURE="temperature"
+DT = "dt"
+INTEGRATOR = "integrator"
+INTEGRATOR_ARGS = "integrator_args"
+
+
+DEFAULT_MN_ARGS = {"mdp":"em.mdp"}
+
+DEFAULT_MD_ARGS = { "mdp":"md_CHARMM27.mdp",  # the default mdp template 
+                    "nstxout": 10,    # trr pos
+                    "nstvout": 10,    # trr veloc
+                    "nstfout": 10,    # trr forces
+                    }
+
+DEFAULT_EQ_ARGS = { "mdp":"md_CHARMM27.mdp",  # the default mdp template 
+                    "define":"-DPOSRES" # do position restrained md for equilibriation
+                    }
+
+
+def create_top(o, struct, posres, box=None):
+    print("attempting to auto-generate a topology...")
+    
+    if box is None:
+        universe = MDAnalysis.Universe(struct)
+        box=universe.trajectory.ts.dimensions[:3]
+    top = md.topology(struct=struct, protein="protein", posres=posres, dirname=o)
+        # topology returns:
+        # {'top': '/home/andy/tmp/Au/top/system.top', 
+        # 'dirname': 'top', 
+        # 'posres': 'protein_posres.itp', 
+        # 'struct': '/home/andy/tmp/Au/top/protein.pdb'}
+        
+    print("succesfully auto-generated topology")
+        
+    print('pwd', os.getcwd())
+    print('top', top)
+        
+
+    """
+        
+    # check to see if solvation is possible
+    if solvate:
+        # convert Angstrom to Nm, GROMACS works in Nm, and
+        # we use MDAnalysis which uses Angstroms
+        print("attempting auto solvation...")
+        with md.solvate(box=box/10.0, **top):
+            # solvate returns 
+            # {'ndx': '/home/andy/tmp/Au/solvate/main.ndx', 
+            # 'mainselection': '"Protein"', 
+            # 'struct': '/home/andy/tmp/Au/solvate/solvated.pdb', 
+            # 'qtot': 0})
+            print("auto solvation successfull")
+    """
+                
+def create_sim(fid,
+               struct,
+               box = None,
+               top = None,
+               posres = None,
+               temperature = 300,
+               subsystem_factory = "dms2.subsystems.RigidSubsystemFactory",
+               subsystem_selects = ["not resname SOL"],
+               subsystem_args = [],
+               integrator = "dms2.integrators.LangevinIntegrator",
+               integrator_args = [],
+               cg_steps = 10,
+               dt  = 0.1,
+               mn_steps = 500,
+               md_steps = 100,
+               multi = 1,
+               eq_steps = 10,
+               mn_args = DEFAULT_MN_ARGS,
+               eq_args = DEFAULT_EQ_ARGS,
+               md_args = DEFAULT_MD_ARGS,
+               should_solvate = False,
+               ndx=None,
+               **kwargs):
+    """
+    Create the simulation file
+    
+    TODO bring the __main__ docs here
+    """
+    
+    import gromacs
+    
+    # need to create a universe to read various bits for the config, and
+    # to test subsystem creation, so keep it around for this func, 
+    # plus, makeing a universe is a sure fire way to see if we have a valid 
+    # structure.
+    universe = None
+    
+    with h5py.File(fid, "w") as hdf:
+        conf = hdf.create_group("config").attrs
+        src_files = hdf.create_group("src_files")
+
+        def filedata_fromfile(keyname, filename):
+            try:
+                del src_files[str(keyname)]
+            except KeyError:
+                pass
+            src_files[str(keyname)] = fromfile(filename, dtype=uint8)
+
+        # create an attr key /  value in the config attrs
+        def attr(keyname, typ, value):
+            if value is not None:
+                try:
+                    if typ is dict:
+                        conf[keyname + KEYS] = value.keys()
+                        conf[keyname + VALUES] = value.values()
+                    else:
+                        conf[keyname] = typ(value)
+                    print("config[{}] = {}".format(keyname, value))
+                except Exception, e:
+                    print("error, could not convert \"{}\" with value of \"{}\" to an {} type".
+                          format(keyname, value, typ))
+                    raise e
+                
+        # check struct
+        try:
+            universe = MDAnalysis.Universe(struct)
+            print("structure file {} appears OK".format(struct))
+            filedata_fromfile("struct.pdb", struct)
+        except Exception, e:
+            print("structure file {} is not valid".format(struct))
+            raise e
+                
+        try:
+            if box:
+                box = array(box) 
+                print("user specified periodic boundary conditions: {}".format(box))
+            else:
+                box=universe.trajectory.ts.dimensions[:3]
+                print("using pdb specified periodic boundary conditions: {}".format(box))
+            conf[BOX] = box
+        except Exception, e:
+            print("error reading periodic boundary conditions")
+            raise e
+
+        attr(CG_STEPS, int, cg_steps)
+        attr(DT, float, dt)
+        attr(TEMPERATURE, float, temperature)
+        attr(MN_STEPS, int, mn_steps)
+        attr(MD_STEPS, int, md_steps)
+        attr(MULTI, int, multi)
+        attr(EQ_STEPS, int, eq_steps)
+        attr(SHOULD_SOLVATE, int, should_solvate)
+
+        attr(MN_ARGS, dict, mn_args)
+        attr(EQ_ARGS, dict, eq_args)
+        attr(MD_ARGS, dict, md_args)
+        
+        # try to create an integrator
+        attr(INTEGRATOR, str, integrator)
+        attr(INTEGRATOR_ARGS, list, integrator_args)
+        try:
+            integrator_type = util.get_class(conf[INTEGRATOR])
+            integrator_type(None, *conf[INTEGRATOR_ARGS])
+            print("succesfully created integrator {}".format(integrator))
+        except Exception, e:
+            print("error creating integrator {}".format(integrator))
+            raise e
+        
+        
+
+        # make a top if we don't have one
+        if top is None:
+            print("attempting to auto-generate a topology...")
+            with md.topology(struct=struct, protein="protein", posres=posres) as top:
+                # topology returns:
+                # {'top': '/home/andy/tmp/Au/top/system.top', 
+                # 'dirname': 'top', 
+                # 'posres': 'protein_posres.itp', 
+                # 'struct': '/home/andy/tmp/Au/top/protein.pdb'}
+
+                print("succesfully auto-generated topology")
+                
+                print('pwd', os.getcwd())
+                print('top', top)
+
+                filedata_fromfile(TOPOL_TOP, top["top"])
+                filedata_fromfile(POSRES_ITP, top["posres"])
+                filedata_fromfile(STRUCT_PDB, top["struct"])
+                
+                # check to see if solvation is possible
+                if should_solvate:
+                    # convert Angstrom to Nm, GROMACS works in Nm, and
+                    # we use MDAnalysis which uses Angstroms
+                    print("attempting auto solvation...")
+                    with md.solvate(box=box/10.0, **top):
+                        # solvate returns 
+                        # {'ndx': '/home/andy/tmp/Au/solvate/main.ndx', 
+                        # 'mainselection': '"Protein"', 
+                        # 'struct': '/home/andy/tmp/Au/solvate/solvated.pdb', 
+                        # 'qtot': 0})
+                        print("auto solvation successfull")
+
+        else:
+            # use user specified top
+            print("using user specified topology file {}".format(top))
+
+            filedata_fromfile(TOPOL_TOP, top)
+            filedata_fromfile(POSRES_ITP, posres)
+            filedata_fromfile(STRUCT_PDB, struct)
+            
+            # check to see if solvation is possible
+            if should_solvate:
+                # convert Angstrom to Nm, GROMACS works in Nm, and
+                # we use MDAnalysis which uses Angstroms
+                print("attempting auto solvation...")
+                with md.solvate(struct=struct, top=top, box=box/10.0):
+                    # solvate returns 
+                    # {'ndx': '/home/andy/tmp/Au/solvate/main.ndx', 
+                    # 'mainselection': '"Protein"', 
+                    # 'struct': '/home/andy/tmp/Au/solvate/solvated.pdb', 
+                    # 'qtot': 0})
+                    print("auto solvation successfull")
+            
+        # try to make the subsystems.
+        try:
+            # make a fake 'System' object so we can test the subsystem factory.
+            dummysys = None
+            with tempfile.NamedTemporaryFile(suffix=".pdb") as f:  
+                # EXTREMLY IMPORTANT to flush the file, 
+                # NamedTemporaryFile returns an OPEN file, and the array writes to this file, 
+                # so we need to flush it, as this file handle remains open. Then the MDAnalysis
+                # universe opens another handle and reads its contents from it. 
+                data = src_files[STRUCT_PDB][()]
+                data.tofile(f.file)
+                f.file.flush()
+                universe = MDAnalysis.Universe(f.name)
+                dummysys = collections.namedtuple('dummysys', 'universe')(universe)
+                
+            # we have a fake sys now, can call subsys factory
+            factory = util.get_class(subsystem_factory)
+            print("created subsystem factory {}, attepting to create subsystems...".format(subsystem_factory))
+            test_ncgs, test_ss = factory(dummysys, subsystem_selects, *subsystem_args)
+            
+            print("subsystem factory appears to work, produces {} cg variables for each {} subsystems.".format(test_ncgs, len(test_ss)))
+            
+            conf[SUBSYSTEM_FACTORY] = subsystem_factory
+            conf[SUBSYSTEM_SELECTS] = subsystem_selects
+            conf[SUBSYSTEM_ARGS] = subsystem_args
+            print("{}: {}".format(SUBSYSTEM_FACTORY, subsystem_factory))
+
+        except Exception, e:
+            print("error creating subsystem_class, {}".format(e))
+            raise e
+
+        hdf.create_group("timesteps")
+        print("creation of simulation file {} complete".format(fid))
+        
+
 
 
     

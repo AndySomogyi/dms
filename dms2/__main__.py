@@ -7,8 +7,8 @@ Created on Dec 30, 2012
 
 
 '''
-
 import system
+import config
 import util
 import sys
 import tempfile
@@ -94,14 +94,16 @@ def make_parser():
     # by the create config function
     ap = subparsers.add_parser("config", help="create a simulation database, from which a simulation can be run")
     
-    ap.add_argument("-fid", dest="fid", required=True, type=str,
+    ap.add_argument("-o", dest="fid", required=True, type=str,
                     help="name of the simulation file to be created.")
     
     ap.add_argument("-struct", dest="struct", required=True, type=str,
                     help="the starting structure name")
     
     ap.add_argument("-box", dest="box", required=False, nargs=3, type=float, default=None,
-                    help="x,y,z values of the system box in Angstroms")
+                    help="x,y,z values of the system box in Angstroms. "
+                         "If box is not given, the system size is read from the CRYST line "
+                         "in the structure pdb.")
     
     ap.add_argument("-top", dest="top", required=False, default=None,
                     help="name of the topology file. If this is not give, and topology file \
@@ -161,11 +163,11 @@ def make_parser():
     ap.add_argument("-eq_steps", default=10, 
                     help="number of timesteps to run equilibriation")
 
-    ap.add_argument("-mn_args", default=system.DEFAULT_MN_ARGS, 
+    ap.add_argument("-mn_args", default=config.DEFAULT_MN_ARGS, 
                     help="additional parameters to be changed in the minimization options")
 
-    ap.add_argument("-eq_args", default=system.DEFAULT_EQ_ARGS)
-    ap.add_argument("-md_args", default=system.DEFAULT_MD_ARGS)
+    ap.add_argument("-eq_args", default=config.DEFAULT_EQ_ARGS)
+    ap.add_argument("-md_args", default=config.DEFAULT_MD_ARGS)
 
     ap.add_argument("-ndx", default=None, 
                     help="name of index file")
@@ -174,7 +176,21 @@ def make_parser():
                     help="should the system be auto-solvated, if this is set, struct must NOT contain solvent. \
                     defaults to False. This is a boolean flag, to enable, just add \'-solvate\' with no args.")
 
-    ap.set_defaults(__func__=system.create_config)
+    ap.set_defaults(__func__=config.create_sim)
+    
+    
+    ap = subparsers.add_parser("top", help="Given a atomic structure file, auto-generate a topology")
+    ap.add_argument("-o", help="output directory where topology will be generated")
+    ap.add_argument("-struct", dest="struct", required=True, type=str,
+                    help="the starting structure name")
+    ap.add_argument("-posres", dest="posres", required=False,
+                    help="name of a position restraints file, optional.")
+    ap.add_argument("-box", dest="box", required=False, nargs=3, type=float, default=None,
+                    help="x,y,z values of the system box in Angstroms. "
+                         "If box is not given, the system size is read from the CRYST line "
+                         "in the structure pdb.")
+    ap.set_defaults(__func__=config.create_top)
+    
 
     
     # Done with config, the MOST complicated command, now make parsers for the more
@@ -197,6 +213,8 @@ def make_parser():
         s.end_timestep()  
         print(sys)
     ap.set_defaults(__func__=sol)
+    
+
 
     ap = subparsers.add_parser( "mn", help="perform a energy minimization")
     ap.add_argument("sys", help="name of simulation file")
