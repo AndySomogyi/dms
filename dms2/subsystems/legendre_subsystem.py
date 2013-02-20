@@ -55,18 +55,21 @@ class LegendreSubsystem(subsystems.SubSystem):
         self.atoms = universe.selectAtoms(self.select)
 
     def ComputeResiduals(self,CG):
-        return self.atoms.positions - (self.ComputeCGInv(CG) + self.atoms.centerOfMass())
+        return self.atoms.positions - self.ComputeCGInv(CG)
         
     def frame(self):
 
         CG = self.ComputeCG(self.atoms.positions)
         CG_Vel = self.ComputeCG(self.atoms.velocities())
         CG_For = self.ComputeCG_Forces(self.atoms.forces)
-        self.residuals = self.ComputeResiduals(CG)
 
-        return (np.reshape(CG.T,(CG.shape[0]*CG.shape[1])),
-                np.reshape(CG_Vel.T,(CG_Vel.shape[0]*CG_Vel.shape[1])),
-                np.reshape(CG_For.T,(CG_For.shape[0]*CG_For.shape[1])))
+        CG = np.reshape(CG.T,(CG.shape[0]*CG.shape[1]))
+        CG_vel = np.reshape(CG_Vel.T,(CG_Vel.shape[0]*CG_Vel.shape[1]))
+        CG_For = np.reshape(CG_For.T,(CG_For.shape[0]*CG_For.shape[1]))
+        
+        self.residuals = self.ComputeResiduals(CG)
+        
+        return (CG,CG_Vel,CG_For)
         
     def translate(self, CG):
         """
