@@ -130,12 +130,9 @@ DEFAULT_EQ_ARGS = { "mdp":"md_CHARMM27.mdp",  # the default mdp template
                     }
 
 
-def create_top(o, struct, posres, box=None):
+def create_top(o, struct, posres):
     print("attempting to auto-generate a topology...")
     
-    if box is None:
-        universe = MDAnalysis.Universe(struct)
-        box=universe.trajectory.ts.dimensions[:3]
     top = md.topology(struct=struct, protein="protein", posres=posres, dirname=o)
         # topology returns:
         # {'top': '/home/andy/tmp/Au/top/system.top', 
@@ -164,6 +161,34 @@ def create_top(o, struct, posres, box=None):
             # 'qtot': 0})
             print("auto solvation successfull")
     """
+
+def create_sol(o, struct, top, box=None):
+    # make a top if we don't have one
+    
+    # topology returns:
+    # {'top': '/home/andy/tmp/Au/top/system.top', 
+    # 'dirname': 'top', 
+    # 'posres': 'protein_posres.itp', 
+    # 'struct': '/home/andy/tmp/Au/top/protein.pdb'}
+    
+ 
+    # convert Angstrom to Nm, GROMACS works in Nm, and
+    # we use MDAnalysis which uses Angstroms
+    print("attempting auto solvation...")
+    
+    if box is None:
+        universe = MDAnalysis.Universe(struct)
+        box=universe.trajectory.ts.dimensions[:3]
+        
+    sol = md.solvate(dirname=o,struct=struct,top=top,box=box/10.0)
+    # solvate returns 
+    # {'ndx': '/home/andy/tmp/Au/solvate/main.ndx', 
+    # 'mainselection': '"Protein"', 
+    # 'struct': '/home/andy/tmp/Au/solvate/solvated.pdb', 
+    # 'qtot': 0})
+    print("auto solvation successfull")
+    print(sol)
+
                 
 def create_sim(fid,
                struct,

@@ -173,23 +173,39 @@ def make_parser():
                     help="name of index file")
 
     ap.add_argument("-solvate", dest="should_solvate", action="store_true",
-                    help="should the system be auto-solvated, if this is set, struct must NOT contain solvent. \
-                    defaults to False. This is a boolean flag, to enable, just add \'-solvate\' with no args.")
+                    help="should the system be auto-solvated, if this is set, struct must NOT contain solvent. "
+                    "defaults to False. This is a boolean flag, to enable, just add \'-solvate\' with no args.")
 
     ap.set_defaults(__func__=config.create_sim)
     
     
-    ap = subparsers.add_parser("top", help="Given a atomic structure file, auto-generate a topology")
+    ap = subparsers.add_parser("top", help="Given a atomic structure file, auto-generate a topology, "
+                               "and save it in a directory. "
+                               "This is usefull for testing topo auto generation. ")
     ap.add_argument("-o", help="output directory where topology will be generated")
     ap.add_argument("-struct", dest="struct", required=True, type=str,
                     help="the starting structure name")
     ap.add_argument("-posres", dest="posres", required=False,
                     help="name of a position restraints file, optional.")
+    ap.set_defaults(__func__=config.create_top)
+
+
+    #create_sol(o, struct, posres, top, box=None):
+    ap = subparsers.add_parser("solvate", help="Given a atomic structure file, attempt auto-solvation, "
+                               "and save it in a directory. "
+                               "This is usefull for testing auto-solvation. "
+                               "All the inputs to solvate are returned from top")
+    ap.add_argument("-o", help="output directory where solvated structure will be generated")
+    ap.add_argument("-struct", dest="struct", required=True, type=str,
+                    help="the starting structure name")
+    ap.add_argument("-top", dest="top", required=True,
+                    help="name of the topology file.")
     ap.add_argument("-box", dest="box", required=False, nargs=3, type=float, default=None,
                     help="x,y,z values of the system box in Angstroms. "
                          "If box is not given, the system size is read from the CRYST line "
                          "in the structure pdb.")
-    ap.set_defaults(__func__=config.create_top)
+    ap.set_defaults(__func__=config.create_sol)
+
     
 
     
@@ -204,7 +220,10 @@ def make_parser():
         integrator.run()
     ap.set_defaults(__func__=run)
 
-    ap = subparsers.add_parser("sol", help="perform only a solvation")
+    ap = subparsers.add_parser("runsol", help="Like run, but perfoms only the auto-solvation step. " 
+                               "Usefull for debugging run time auto-solvation. "
+                               "It unlikely this will be needed as the auto-solvation can be tested "
+                               "directly from the struture / top files," )
     ap.add_argument("sys", help="name of simulation file")
     def sol(sys) :
         s=system.System(sys, "a")
