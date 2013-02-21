@@ -28,6 +28,9 @@ class RigidSubsystem(subsystems.SubSystem):
         self.atoms = universe.selectAtoms(self.select)
         
     def frame(self):
+        """
+        returns a 3-tuple of row vectors: (cm,vel,force).
+        """
         # make a column vector
         masses = self.atoms.masses()[:,newaxis]
         # scaled positions, positions is natom * 3, box should be 3 vector.
@@ -46,6 +49,10 @@ class RigidSubsystem(subsystems.SubSystem):
         return (cm,vel,force)
     
     def translate(self, values):
+        """
+        @param values: difference in center of mass, this value is added to all 
+            atomic positions. It must be a 1x3 row vector.
+        """
         self.atoms.positions += values
     
     def minimized(self):

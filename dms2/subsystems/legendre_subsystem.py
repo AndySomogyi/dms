@@ -58,6 +58,9 @@ class LegendreSubsystem(subsystems.SubSystem):
         return self.atoms.positions - self.ComputeCGInv(CG)
         
     def frame(self):
+        """
+        Returns a 3 tuple of CG variables, each one is a row vector of size n_cg
+        """
 
         CG = self.ComputeCG(self.atoms.positions)
         CG_Vel = self.ComputeCG(self.atoms.velocities())
@@ -76,7 +79,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         translates the atomic positions from a given vectory of CG positions,
         and then adds the residuals for higher accuracy.
         
-        @param CG: a 3*n_cg x 1 array 
+        @param CG: a length N_cg 1D array.  
         """
         self.atoms.positions = self.ComputeCGInv(CG) + self.residuals
         

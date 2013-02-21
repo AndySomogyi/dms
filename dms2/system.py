@@ -435,11 +435,25 @@ class System(object):
                    
         
     def translate(self, cg_translate):
+        """
+        translates ALL of the subsystems according to the given array of CG variables. 
+        
+        cg_translate can be either a row or column vector of length N_subsys x N_cg.
+        Each subsystem will be given a n_cg 1D array. If the given cg_translate is not the
+        correct size, an exception will be thrown. 
+        """
+        # make sure it is of the correct shape, this will make a 1D array out of the 
+        # given array, and will throw an exception of the array is not the correct
+        # size. 
+        
+        # n_cg * n_ss
+        cg_translate = cg_translate.reshape(len(self.subsystems) * len(self.ncgs))
+        
         #write to ts
         self.current_timestep.cg_translate = cg_translate
         
         for i, s in enumerate(self.subsystems):
-            s.translate(cg_translate[0,i*self.ncgs:i*self.ncgs+self.ncgs])
+            s.translate(cg_translate[i*self.ncgs:i*self.ncgs+self.ncgs])
             
         self.current_timestep.atomic_final_positions = self.universe.atoms.positions
         
