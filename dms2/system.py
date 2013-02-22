@@ -447,7 +447,7 @@ class System(object):
         # size. 
         
         # n_cg * n_ss
-        cg_translate = cg_translate.reshape(len(self.subsystems) * len(self.ncgs))
+        cg_translate = cg_translate.reshape(len(self.subsystems) * self.ncgs)
         
         #write to ts
         self.current_timestep.cg_translate = cg_translate
