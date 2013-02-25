@@ -70,9 +70,9 @@ class LegendreSubsystem(subsystems.SubSystem):
         self.CG_Vel = np.reshape(CG_Vel.T,(CG_Vel.shape[0]*CG_Vel.shape[1]))
         self.CG_For = np.reshape(CG_For.T,(CG_For.shape[0]*CG_For.shape[1]))
         
-        self.residuals = self.ComputeResiduals(CG)
+        self.residuals = self.ComputeResiduals(self.CG)
         
-        return (CG,CG_Vel,CG_For)
+        return (self.CG,self.CG_Vel,self.CG_For)
         
     def translate(self, dCG):
         """
