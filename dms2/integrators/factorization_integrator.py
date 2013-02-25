@@ -28,6 +28,6 @@ class FactorizationIntegrator(integrator.Integrator):
         # [:,np.newaxis]: makes a 1xN column vector.
         avg_velocities = np.mean(np.mean(self.system.cg_velocities, axis = 0), axis = 1).flatten()[:,np.newaxis]
         
-        cg_translate = cg_positions + self.system.dt * avg_velocities
+        cg_translate = self.system.dt * avg_velocities
         
         self.system.translate(cg_translate)
