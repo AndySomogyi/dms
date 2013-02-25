@@ -66,22 +66,23 @@ class LegendreSubsystem(subsystems.SubSystem):
         CG_Vel = self.ComputeCG(self.atoms.velocities())
         CG_For = self.ComputeCG_Forces(self.atoms.forces)
 
-        CG = np.reshape(CG.T,(CG.shape[0]*CG.shape[1]))
-        CG_Vel = np.reshape(CG_Vel.T,(CG_Vel.shape[0]*CG_Vel.shape[1]))
-        CG_For = np.reshape(CG_For.T,(CG_For.shape[0]*CG_For.shape[1]))
+        self.CG = np.reshape(CG.T,(CG.shape[0]*CG.shape[1]))
+        self.CG_Vel = np.reshape(CG_Vel.T,(CG_Vel.shape[0]*CG_Vel.shape[1]))
+        self.CG_For = np.reshape(CG_For.T,(CG_For.shape[0]*CG_For.shape[1]))
         
         self.residuals = self.ComputeResiduals(CG)
         
         return (CG,CG_Vel,CG_For)
         
-    def translate(self, CG):
+    def translate(self, dCG):
         """
-        translates the atomic positions from a given vectory of CG positions,
-        and then adds the residuals for higher accuracy.
+        translates the atomic positions from a given vectory of dCG positions,
+        where dCG is a finite change in the CG velocities times dt,
+        and then adds the residuals for better accuracy.
         
         @param CG: a length N_cg 1D array.  
         """
-        self.atoms.positions = self.ComputeCGInv(CG) + self.residuals
+        self.atoms.positions = self.ComputeCGInv(self.CG + dCG) + self.residuals
         
     def minimized(self):
         pass
