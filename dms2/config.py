@@ -179,6 +179,10 @@ def create_sol(o, struct, top, box=None):
     if box is None:
         universe = MDAnalysis.Universe(struct)
         box=universe.trajectory.ts.dimensions[:3]
+    else:
+        # box could be anything, fine as long as we can convert to an array
+        box = array(box) 
+        print("user specified periodic boundary conditions: {}".format(box))
         
     sol = md.solvate(dirname=o,struct=struct,top=top,box=box/10.0)
     # solvate returns 
