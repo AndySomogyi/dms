@@ -3,7 +3,6 @@
 python -m dms2 config \
        -o 1LFG-open.hdf \
        -struct 1LFG-open.pdb \
-       -posres 1LFG-open.posres.itp \
        -temperature 285.0 \
        -subsystem_selects "not segid SOL" \
        -cg_steps 30 \

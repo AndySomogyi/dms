@@ -28,6 +28,7 @@ import shutil
 import tempfile
 import glob
 import numpy
+import re
 
 #from collections import Mapping, Hashable 
 
@@ -111,7 +112,7 @@ class MDrunner(gromacs.run.MDrunner):
             return ["mpiexec", "-n", str(nprocs)]
  
     
-def minimize(struct, top, posres, dirname=None, 
+def minimize(struct, top, top_includes, dirname=None, 
              minimize_output="em.pdb", deffnm="em", mdrunner=MDrunner, 
              mdp="em.mdp", **kwargs):
     """
@@ -168,8 +169,11 @@ def minimize(struct, top, posres, dirname=None,
         
     struct = data_tofile(struct, "src.pdb", dirname=dirname)
     top = data_tofile(top, "src.top", dirname=dirname)
-    posres = data_tofile(posres, "posres.itp", dirname=dirname)
-    
+
+#    import pdb; pdb.set_trace()
+    logging.debug("top_includes: {}".format(top_includes))
+    for i in top_includes:
+        data_tofile(i,dirname=dirname)
     
     logging.info("using mdp template {} from key {}".format(config.templates[mdp], mdp))
     mdp = config.templates[mdp]
@@ -185,7 +189,7 @@ def minimize(struct, top, posres, dirname=None,
     result["dirname"] = dirname
     return MDManager(result)
     
-def setup_md(struct, top, posres, deffnm="md", dirname=None, mdp="md_CHARMM27.mdp", **kwargs):
+def setup_md(struct, top, top_includes, deffnm="md", dirname=None, mdp="md_CHARMM27.mdp", **kwargs):
     """Set up Gromacs MD run..
 
     Additional itp files should be in the same directory as the top file.
@@ -262,7 +266,12 @@ def setup_md(struct, top, posres, deffnm="md", dirname=None, mdp="md_CHARMM27.md
         
     struct = data_tofile(struct, "src.pdb", dirname=dirname)
     top = data_tofile(top, "src.top", dirname=dirname)
-    posres = data_tofile(posres, "posres.itp", dirname=dirname)
+
+    logging.debug("top_includes: {}".format(top_includes))
+    for i in top_includes:
+        logging.debug("copying file {} to {}".format(i,dirname))
+        data_tofile(i,dirname=dirname)
+    
     
     kwargs.setdefault('qname', None)
 
@@ -280,23 +289,22 @@ def setup_md(struct, top, posres, deffnm="md", dirname=None, mdp="md_CHARMM27.md
     return MDManager(setup_MD)
         
 
-def topology(struct, protein="protein", top=None, dirname="top", posres=None, ff="charmm27", water="spc", ignh=True, **top_args):
+def topology(struct, protein="protein", dirname="top", ff="charmm27", water="spc", ignh=True, **top_args):
     """
     Generate a topology for a given structure.
     
-    @return a dict with the following keys: {"top", "struct", "posres", "dirname"}, where
+    @return a dict with the following keys: {"top", "struct", "dirname"}, where
     the values are the file names of the resulting topology, structure, and position restraint files.
     """
-    if top is None:
-        logging.info("config did not specify a topology, autogenerating using pdb2gmx...")
-        pdb2gmx_args = {"ff":ff, "water":water, "ignh":ignh}
-        pdb2gmx_args.update(top_args)
-        struct = data_tofile(struct, "src.pdb", dirname=dirname)
-        result = gromacs.setup.topology(struct, protein, "system.top", dirname, **pdb2gmx_args)
-        result["dirname"] = dirname
-    else:
-        logging.info("config specified a topology, \{\"top\":{}, \"struct\":{}\}".format(top, struct))
-        result={"top":top, "struct":struct, "posres":posres, "dirname":None}
+
+    logging.info("autogenerating topology using pdb2gmx...")
+    pdb2gmx_args = {"ff":ff, "water":water, "ignh":ignh}
+    pdb2gmx_args.update(top_args)
+    struct = data_tofile(struct, "src.pdb", dirname=dirname)
+    result = gromacs.setup.topology(struct, protein, "system.top", dirname, **pdb2gmx_args)
+    result["dirname"] = dirname
+
+    print("result: {}".format(result))
     
     return MDManager(result)
         
@@ -529,6 +537,34 @@ def check_main_index(struct):
                 raise ValueError(msg)
             
     raise ValueError("gromacs.setup.make_main_index appears to have worked, but there was no __main__ group")
+
+
+def top_includes(top, include_dirs=["."]):
+    """
+    parse a top file, and figure out all the included files 
+    that can be found in the specified include dirs.
+    @param top: file name of a gromacs top file
+    @param include_dirs: a list of directories in which to search for the include files.  
+    @return: a list of absolute paths for files find in the include paths.
+    """
+    includes = []
+    r=re.compile("^\s*#\s*include\s*\"(.*?)\"\s*")
+    
+    def isfile(f):
+        for d in include_dirs:
+            j=os.path.join(d, f)
+            if os.path.isfile(j):
+                return j
+        return False
+    
+    for line in open(top):
+        match = r.match(line)
+        if match:
+            f=isfile(match.group(1))
+            if f:        
+                includes.append(f)
+    return includes
+    
     
         
         

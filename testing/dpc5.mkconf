@@ -3,7 +3,6 @@
 python -m dms2 config \
        -o dpc5.hdf \
        -struct dpc5.pdb \
-       -posres dpc5.posres.itp \
        -box 25.0  25.0 25.0 \
        -top dpc5.top \
        -temperature 285.0 \

@@ -112,6 +112,12 @@ def make_parser():
     
     ap.add_argument("-posres", dest="posres", required=False,
                     help="name of a position restraints file, optional.")
+
+    ap.add_argument('-I', action='append', dest='include_dirs',
+                    default=[], type=str, required=False,
+                    help="Include directories to search for topology file includes. There can be many " 
+                         "additional include directories, just like gcc, but UNLIKE GCC, there must be a space "
+                         "between the -I and the dir, for example -I /home/foo -I /home/foo/bar.")
     
     ap.add_argument("-temperature", dest="temperature", required=False, type=float, default= 300,
                     help="the temperature at which to run the simulation, defaults to 300K.")

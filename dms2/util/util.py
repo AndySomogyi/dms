@@ -44,10 +44,17 @@ def stripped_positions(fname, sub):
     """
     return MDAnalysis.Universe(fname).atoms.positions[sub]
     
-def data_tofile(data, fid, sep="", fmt="%s", dirname="."):
+def data_tofile(data, fid=None, sep="", fmt="%s", dirname="."):
     """
+    @param data: the data to write to a file. This may be either a string, 
+    a h5py.Dataset, a numpy ndarray, or a MDAnalysis atom group or universe. 
+
     @param fid : file or str    
         An open file object, or a string containing a filename.
+        This MAY be None if and only if the data is a h5py.Dataset, in shich case, the 
+        output file name is taken from the last part of the dataset name. e.g. if the 
+        dataset name is /foo/bar/fred', 'fred' will be the output file name (but only if
+        fid is None. If fid is given, this overrides the dataset name. 
     @param sep : str
         Separator between array items for text output. If "" (empty), a binary file is written, 
         equivalent to file.write(a.tostring()).
@@ -58,8 +65,6 @@ def data_tofile(data, fid, sep="", fmt="%s", dirname="."):
     @return: absolute path of the created file
         """ 
     if data is not None:
-        
-            
         if isinstance(data, str) and os.path.isfile(data):
             src = os.path.abspath(data)
             with utilities.in_dir(dirname):
@@ -68,8 +73,14 @@ def data_tofile(data, fid, sep="", fmt="%s", dirname="."):
         else:
             with utilities.in_dir(dirname):
                 if type(data) is h5py.Dataset:
+                    print('name:',data.name)
+                    if fid is None:
+                        fid = os.path.split(data.name)[1]
+                        print('fid:',fid)
+                    # data now becomes an ndarray
                     data = data[()]
                 if type(data) is n.ndarray:  
+                    print('writing file {} in dir {}'.format(fid,dirname))
                     data.tofile(fid,sep,fmt)
                 elif isinstance(data, MDAnalysis.core.AtomGroup.AtomGroup) or isinstance(data, MDAnalysis.core.AtomGroup.Universe):
                     print("pwd", os.path.curdir)

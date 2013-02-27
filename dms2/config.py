@@ -79,6 +79,7 @@ KB = 0.0083144621
 CURRENT_TIMESTEP = "current_timestep" 
 SRC_FILES = "src_files"
 FILE_DATA_LIST = ["struct.pdb", "topol.top", "index.ndx", "posres.itp"]
+TOP_INCLUDES = "top_includes"
 TIMESTEPS = "timesteps"
 CONFIG = "config"
 STRUCT_PDB = "struct.pdb"
@@ -162,7 +163,7 @@ def create_top(o, struct, posres):
             print("auto solvation successfull")
     """
 
-def create_sol(o, struct, top, box=None):
+def create_sol(o, struct, top, posres, box=None):
     # make a top if we don't have one
     
     # topology returns:
@@ -198,7 +199,6 @@ def create_sim(fid,
                struct,
                box = None,
                top = None,
-               posres = None,
                temperature = 300,
                subsystem_factory = "dms2.subsystems.RigidSubsystemFactory",
                subsystem_selects = ["not resname SOL"],
@@ -216,6 +216,7 @@ def create_sim(fid,
                md_args = DEFAULT_MD_ARGS,
                should_solvate = False,
                ndx=None,
+               include_dirs=[],
                **kwargs):
     """
     Create the simulation file
@@ -234,6 +235,7 @@ def create_sim(fid,
     with h5py.File(fid, "w") as hdf:
         conf = hdf.create_group("config").attrs
         src_files = hdf.create_group("src_files")
+        top_includes = hdf.create_group(TOP_INCLUDES)
 
         def filedata_fromfile(keyname, filename):
             try:
@@ -241,6 +243,15 @@ def create_sim(fid,
             except KeyError:
                 pass
             src_files[str(keyname)] = fromfile(filename, dtype=uint8)
+
+        # grab the files that a top includes, must be called in the
+        # dir the top file is in. 
+        def read_includes(top):
+            include_dirs.append(".")
+            includes = md.top_includes(top, include_dirs)
+            for i in includes:
+                print("found include file: {}".format(i))
+                top_includes[os.path.split(i)[1]] = fromfile(i,dtype=uint8)
 
         # create an attr key /  value in the config attrs
         def attr(keyname, typ, value):
@@ -302,26 +313,24 @@ def create_sim(fid,
             print("error creating integrator {}".format(integrator))
             raise e
         
-        
-
         # make a top if we don't have one
         if top is None:
             print("attempting to auto-generate a topology...")
-            with md.topology(struct=struct, protein="protein", posres=posres) as top:
+            with md.topology(struct=struct, protein="protein") as top:
                 # topology returns:
                 # {'top': '/home/andy/tmp/Au/top/system.top', 
                 # 'dirname': 'top', 
-                # 'posres': 'protein_posres.itp', 
                 # 'struct': '/home/andy/tmp/Au/top/protein.pdb'}
 
                 print("succesfully auto-generated topology")
-                
+
                 print('pwd', os.getcwd())
                 print('top', top)
 
                 filedata_fromfile(TOPOL_TOP, top["top"])
-                filedata_fromfile(POSRES_ITP, top["posres"])
                 filedata_fromfile(STRUCT_PDB, top["struct"])
+                include_dirs = [os.path.abspath(top.dirname)]
+                read_includes(top["top"])
                 
                 # check to see if solvation is possible
                 if should_solvate:
@@ -335,14 +344,14 @@ def create_sim(fid,
                         # 'struct': '/home/andy/tmp/Au/solvate/solvated.pdb', 
                         # 'qtot': 0})
                         print("auto solvation successfull")
-
+            
         else:
             # use user specified top
             print("using user specified topology file {}".format(top))
 
             filedata_fromfile(TOPOL_TOP, top)
-            filedata_fromfile(POSRES_ITP, posres)
             filedata_fromfile(STRUCT_PDB, struct)
+            read_includes(top)
             
             # check to see if solvation is possible
             if should_solvate:

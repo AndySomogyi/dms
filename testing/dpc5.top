@@ -589,7 +589,7 @@ DPC                    3
 
 ; Include Position restraint file
 #ifdef POSRES
-#include "posres.itp"
+#include "dpc5.posres.itp"
 #endif
 
 ; Include water topology

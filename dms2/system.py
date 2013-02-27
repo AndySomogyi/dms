@@ -233,8 +233,8 @@ class System(object):
         return self._get_file_data(TOPOL_TOP)
     
     @property
-    def posres(self):
-        return self._get_file_data(POSRES_ITP)
+    def top_includes(self):
+        return self.hdf[TOP_INCLUDES].values()
     
     @property
     def box(self):
@@ -473,7 +473,7 @@ class System(object):
         
         return md.setup_md(struct=struct, \
                                top=top, \
-                               posres = self.posres, \
+                               top_includes=self.top_includes, \
                                nsteps=self.config[EQ_STEPS], \
                                deffnm="eq", \
                                **self.eq_args)
@@ -493,7 +493,7 @@ class System(object):
         
         return md.setup_md(struct=struct, \
                                top=top, \
-                               posres = self.posres, \
+                               top_includes=self.top_includes, \
                                nsteps=self.config[MD_STEPS], \
                                multi=self.config[MULTI], \
                                deffnm="md", \
@@ -647,7 +647,7 @@ class System(object):
             logging.info("performing minimization with self.universe and self.top")
             with md.minimize(struct=self.struct, \
                                  top=self.top, \
-                                 posres = self.posres, \
+                                 top_includes=self.top_includes, \
                                  nsteps=self.config[MN_STEPS], \
                                  deffnm="mn", \
                                  **self.mn_args) as mn:
@@ -659,7 +659,7 @@ class System(object):
             logging.info("performing minimization with solvated structure")
             result = md.minimize(struct=struct, \
                                      top=top, \
-                                     posres = self.posres, \
+                                     top_includes = self.top_includes, \
                                      nsteps=self.config[MN_STEPS], \
                                      deffnm="mn", \
                                      **self.mn_args)
