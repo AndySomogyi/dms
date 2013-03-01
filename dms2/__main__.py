@@ -101,7 +101,7 @@ def _set_tempdir(f):
     os.environ["TEMP"] = d
     os.environ["TMP"] = d
     tempfile.tempdir = d
-    logging.info("tempdir for MD runs will be ".format(tempfile.gettempdir()))
+    logging.info("tempdir for MD runs will be {}".format(tempfile.gettempdir()))
 
 def make_parser():
     """
