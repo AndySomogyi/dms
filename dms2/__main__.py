@@ -13,7 +13,9 @@ import util
 import sys
 import tempfile
 import os
+import os.path
 import argparse
+import logging
 
 dpc100 = { 
     'box' : [65.0, 65.0, 65.0],      
@@ -81,6 +83,25 @@ Au2 = {
 
 
 test_structs = {"dpc100":dpc100, "dpc60":dpc60, "dpc5":dpc5}
+
+def _set_tempdir(f):
+    """ 
+    get the absolute path of the directory containing the given file name, 
+    and set the tmpdir env var to point to this dir. 
+    """
+    abspath = os.path.abspath(f)
+    d = os.path.split(abspath)[0]
+    
+    # make sure this is an actual directory
+    if not os.path.isdir(d):
+        raise ValueError("Error, the file {} is not located in a valid directory {}".format(f,d))
+
+    # names that os.gettempdir looks at
+    os.environ["TMPDIR"] = d
+    os.environ["TEMP"] = d
+    os.environ["TMP"] = d
+    tempfile.tempdir = d
+    logging.info("tempdir for MD runs will be ".format(tempfile.gettempdir()))
 
 def make_parser():
     """
@@ -220,7 +241,11 @@ def make_parser():
     ap = subparsers.add_parser("run", help="start or continue a full simulation. "
                                " This will automatically continue a simulation",)
     ap.add_argument("sys", help="name of simulation file")
-    def run(sys) :
+    ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
+    def run(sys, debug) :
+        _set_tempdir(sys)
+        if debug:
+            os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
         integrator = s.integrator()
         integrator.run()
@@ -231,7 +256,11 @@ def make_parser():
                                "It unlikely this will be needed as the auto-solvation can be tested "
                                "directly from the struture / top files," )
     ap.add_argument("sys", help="name of simulation file")
-    def sol(sys) :
+    ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
+    def sol(sys, debug) :
+        _set_tempdir(sys)
+        if debug:
+            os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
         s.begin_timestep()
         s.solvate()
@@ -244,7 +273,11 @@ def make_parser():
     ap = subparsers.add_parser( "mn", help="perform a energy minimization")
     ap.add_argument("sys", help="name of simulation file")
     ap.add_argument("-sol", action="store_true", help="auto solvate before minimization")
-    def mn(sys, sol) :
+    ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
+    def mn(sys, sol, debug):
+        _set_tempdir(sys)
+        if debug:
+            os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
         s.begin_timestep()
         if sol:
@@ -261,7 +294,11 @@ def make_parser():
     ap = subparsers.add_parser("mneq", help="performs energy minimization followed by equilibriation")
     ap.add_argument("sys", help="name of simulation file")
     ap.add_argument("-sol", action="store_true", help="auto solvate between steps")
-    def mneq(sys,sol) :
+    ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
+    def mneq(sys,sol,debug) :
+        _set_tempdir(sys)
+        if debug:
+            os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
         s.begin_timestep()
         if sol:
@@ -280,7 +317,11 @@ def make_parser():
     ap = subparsers.add_parser("mneqmd", help="performs energy minimzatin, equilibriation and molecular dynamics")
     ap.add_argument("sys", help="name of simulation file")
     ap.add_argument("-sol", action="store_true", help="auto solvate between steps")
-    def mneqmd(sys,sol) :
+    ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
+    def mneqmd(sys,sol,debug) :
+        _set_tempdir(sys)
+        if debug:
+            os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
         s.begin_timestep()
         if sol:
@@ -302,7 +343,11 @@ def make_parser():
     ap = subparsers.add_parser("eq", help="performs an equilibriation")
     ap.add_argument("sys", help="name of simulation file")
     ap.add_argument("-sol", action="store_true", help="auto solvate between steps")
-    def eq(sys) :
+    ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
+    def eq(sys,debug) :
+        _set_tempdir(sys)
+        if debug:
+            os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
         s.begin_timestep()
         if sol:
@@ -317,7 +362,11 @@ def make_parser():
 
     ap = subparsers.add_parser("atomistic_step", help="perform an full atomistic step")
     ap.add_argument("sys", help="name of simulation file")
-    def atomistic_step(sys) :
+    ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
+    def atomistic_step(sys,debug) :
+        _set_tempdir(sys)
+        if debug:
+            os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
         integrator = s.integrator()
         s.begin_timestep()
@@ -327,7 +376,11 @@ def make_parser():
 
     ap = subparsers.add_parser("step", help="a single complete Langevin step")
     ap.add_argument("sys", help="name of simulation file")
-    def step(sys) :
+    ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
+    def step(sys,debug) :
+        _set_tempdir(sys)
+        if debug:
+            os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
         integrator = s.integrator()
         integrator.step()
@@ -336,7 +389,11 @@ def make_parser():
     ap = subparsers.add_parser("md", help="perform ONLY an molecular dynamics step with the starting structure")
     ap.add_argument("sys", help="name of simulation file")
     ap.add_argument("-sol", action="store_true", help="auto solvate before md")
-    def md(sys,sol) :
+    ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
+    def md(sys,sol,debug) :
+        _set_tempdir(sys)
+        if debug:
+            os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
         s.begin_timestep()
         if sol:
@@ -350,7 +407,11 @@ def make_parser():
 
     ap = subparsers.add_parser("cg_step", help="perform just the coarse grained portion of the time step")
     ap.add_argument("sys", help="name of simulation file")
-    def cg_step(sys) :
+    ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
+    def cg_step(sys,debug) :
+        _set_tempdir(sys)
+        if debug:
+            os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
         s._load_ts(s.current_timestep)
         integrator = s.integrator()
@@ -386,6 +447,10 @@ def test(fid,
          **kwargs):
     print("hello")
     
+# Set the tmp directory to the current directory.
+# by default, this is something else, and as MD produces large files, 
+# should be in a location that can hold large files. 
+os.environ["DMS_DEBUG"] = "TRUE"
 
 
 parser = make_parser()
