@@ -173,10 +173,12 @@ def QR_Decomp(V,dtype):
 
     return V
 
-def poly_indexes(kmax, CGOrder=6):
+def poly_indexes(kmax, CGOrder=3):
     """
-    Create 2D array of Legendre polynomial indices with index sum <= psum. 
-
+    Create 2D array of Legendre polynomial indices with index sum <= kmax. 
+    CGOrder specifies the maximum order of the polynmial, and kmax separates
+    the low order from high order CGs.
+    
     For example, if psum is 1, the this returns
     [[0, 0, 0],
      [1, 0, 0],
