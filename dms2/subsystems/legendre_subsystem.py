@@ -128,8 +128,7 @@ class LegendreSubsystem(subsystems.SubSystem):
     def Construct_Basis(self,coords):
         """
         Constructs a matrix of orthonormalized legendre basis functions
-        of size Natoms x NCG. The implementation closely follows that of SNW,
-        although it does not make much sense to me. - Andrew
+        of size Natoms x NCG.
         """ 
         ScaledPos = 2.0 * coords / self.box
         # grab the masses, and make it a column vector
@@ -141,7 +140,7 @@ class LegendreSubsystem(subsystems.SubSystem):
             px = legendre(k1)(ScaledPos[:,0])
             py = legendre(k2)(ScaledPos[:,1])
             pz = legendre(k3)(ScaledPos[:,2])
-            Basis[:,i] = np.sqrt(k1 + 0.5) * np.sqrt(k2 + 0.5) * np.sqrt(k3 + 0.5) * px * py * pz
+            Basis[:,i] = px * py * pz
             
         WBasis = Basis * np.sqrt(Masses)
         WBasis = QR_Decomp(WBasis, 'unormalized')
