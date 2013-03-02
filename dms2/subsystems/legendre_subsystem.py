@@ -173,7 +173,7 @@ def QR_Decomp(V,dtype):
 
     return V
 
-def poly_indexes(kmax):
+def poly_indexes(kmax, CGOrder=6):
     """
     Create 2D array of Legendre polynomial indices with index sum <= psum. 
 
@@ -186,10 +186,16 @@ def poly_indexes(kmax):
     """
     indices = []
 
-    for n in range(kmax + 1):
-        for i in range(n+1):
-            for j in range(n+1-i):
-                indices.append([n-i-j, j, i])
+    indices.append(np.array([0,0,0],'int'))
+    indices.append(np.array([0,0,1],'int'))
+    indices.append(np.array([0,1,0],'int'))
+    indices.append(np.array([1,0,0],'int'))
+    
+    for i in range(CGOrder+1):
+        for j in range(CGOrder+1):
+                for k in range(CGOrder+1):
+                        if i +j+k <= kmax and i+j+k > 1:
+                            indices.append(np.array([i,j,k],'int'))
                 
     return np.array(indices,'i')
 
