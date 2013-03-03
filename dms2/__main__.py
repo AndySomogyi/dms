@@ -1,4 +1,3 @@
-
 '''
 
 Created on Dec 30, 2012
@@ -17,72 +16,6 @@ import os.path
 import argparse
 import logging
 
-dpc100 = { 
-    'box' : [65.0, 65.0, 65.0],      
-    'temperature' : 300.0, 
-    'struct': 'dpc100.sol.pdb',
-    'top' :  'dpc100.top',
-    "subsystem_selects": ["resname DPC"],
-    "subsystem_args":["resid unique"],
-    "cg_steps":5,
-    "dt":100,
-    "mn_steps":5000,
-    "eq_steps":500,
-    "md_steps":2000,
-    "multi":10,
-    "solvate":False,
-    }
-
-dpc60 = { 
-    'box' : [75.0, 75.0, 75.0],      
-    'temperature' : 285.0, 
-    'struct': 'dpc60.pdb',
-    'top' :  'dpc60.top',
-    "subsystem_selects": ["resname DPC"],
-    "subsystem_args":["resid unique"],
-    "cg_steps":100,
-    "dt":50,
-    "mn_steps":5000,
-    "eq_steps":500,
-    "md_steps":2000,
-    "multi":10,
-    "should_solvate":True,
-    }
-
-dpc5 = { 
-    'box' : [25.0, 25.0, 25.0],      
-    'temperature' : 285.0, 
-    'struct': 'dpc5.pdb',
-    'top' :  'dpc5.top',
-    "subsystem_selects": ["resname DPC"],
-    "subsystem_args":["resid unique"],
-    "cg_steps":30,
-    "dt":10,
-    "mn_steps":5000,
-    "eq_steps":500,
-    "md_steps":2000,
-    "multi":2,
-    "should_solvate":True,
-    }
-
-
-Au2 = { 
-    'box' : [50.0, 50.0, 50.0],      
-    'temperature' : 300.0, 
-    'struct': '/home/andy/tmp/1OMB/1OMB.pdb',
-    "subsystem_selects": "not resname SOL",
-    "cg_steps":5,
-    "dt":10.0,
-    "top_args": {},
-    "mn_steps":5,
-    "eq_steps":50,
-    "md_steps":50,
-    "multi":4,
-    "solvate":False,
-    } 
-
-
-test_structs = {"dpc100":dpc100, "dpc60":dpc60, "dpc5":dpc5}
 
 def _set_tempdir(f):
     """ 
@@ -447,29 +380,10 @@ def test(fid,
          **kwargs):
     print("hello")
     
-# Set the tmp directory to the current directory.
-# by default, this is something else, and as MD produces large files, 
-# should be in a location that can hold large files. 
-os.environ["DMS_DEBUG"] = "TRUE"
-
-
+# make the arg parser, and call whatever func was stored with the arg. 
 parser = make_parser()
 args = parser.parse_args()
 print(args)
 func = args.__func__
 del args.__dict__["__func__"]
 func(**args.__dict__)
-
-
-
-
-"""    
-if sys.argv[1] == "config":
-    parser = config_parser()
-    args=parser.parse_args(sys.argv[2:])
-    print(args)
-    test(**args.__dict__)
-    system.create_config(fid=sys.argv[3], **conf)
-        os.environ["DMS_DEBUG"] = "TRUE"
-        
-"""
