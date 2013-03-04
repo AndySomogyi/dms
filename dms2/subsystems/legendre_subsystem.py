@@ -114,7 +114,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         return np.array([x,y,z]).T
 
     def COM(self,var):
-        return np.dot(var,self.atoms.masses()) / np.sum(self.atoms.masses)
+        return np.dot(var,self.atoms.masses()) / np.sum(self.atoms.masses())
         
     def ComputeCG(self,var):
         """
