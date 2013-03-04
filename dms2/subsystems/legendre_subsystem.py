@@ -69,7 +69,9 @@ class LegendreSubsystem(subsystems.SubSystem):
         self.CG = np.reshape(CG.T,(CG.shape[0]*CG.shape[1]))
         self.CG_Vel = np.reshape(CG_Vel.T,(CG_Vel.shape[0]*CG_Vel.shape[1]))
         self.CG_For = np.reshape(CG_For.T,(CG_For.shape[0]*CG_For.shape[1]))
-        
+        fp = file('CG.dat','a')
+        np.savetxt(fp,self.CG)
+        fp.close()
         return (self.CG,self.CG_Vel,self.CG_For)
         
     def translate(self, dCG):
@@ -94,7 +96,9 @@ class LegendreSubsystem(subsystems.SubSystem):
         boxboundary = self.atoms.bbox()
         self.box = (boxboundary[1,:] - boxboundary[0,:]) * 0.5
         self.basis = self.Construct_Basis(self.atoms.positions - self.atoms.centerOfMass())  # Update this every CG step for now
-
+        np.savetxt('Basis.dat',self.basis)
+        np.savetxt('BoxSize.dat', self.box)
+        
     def ComputeCGInv(self,CG):
         """
         Computes atomic positions from CG positions
