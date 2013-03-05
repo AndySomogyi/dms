@@ -69,9 +69,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         self.CG = np.reshape(CG.T,(CG.shape[0]*CG.shape[1]))
         self.CG_Vel = np.reshape(CG_Vel.T,(CG_Vel.shape[0]*CG_Vel.shape[1]))
         self.CG_For = np.reshape(CG_For.T,(CG_For.shape[0]*CG_For.shape[1]))
-        fp = file('CG.dat','a')
-        np.savetxt(fp,self.CG)
-        fp.close()
+        
         return (self.CG,self.CG_Vel,self.CG_For)
         
     def translate(self, dCG):
@@ -83,7 +81,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         @param CG: a length N_cg 1D array.  
         """
         self.residuals = self.ComputeResiduals(self.CG)
-        self.atoms.positions = self.atoms.centerOfMass() + self.ComputeCGInv(self.CG + dCG) #+ self.residuals
+        self.atoms.positions = self.atoms.centerOfMass() + self.ComputeCGInv(self.CG + dCG) + self.residuals
         
     def minimized(self):
         pass
