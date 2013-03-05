@@ -17,7 +17,7 @@ DMS_TMPDIR : "."
 from pkg_resources import resource_filename, resource_listdir  #@UnresolvedImport
 import os
 
-from numpy import array, fromfile, uint8
+from numpy import array, fromfile, uint8, all
 import tempfile
 import MDAnalysis                       #@UnresolvedImport
 import h5py                             #@UnresolvedImport
@@ -232,6 +232,9 @@ def create_sim(fid,
     # structure.
     universe = None
     
+    # path of centered struct
+    centered_struct = None
+    
     with h5py.File(fid, "w") as hdf:
         conf = hdf.create_group("config").attrs
         src_files = hdf.create_group("src_files")
@@ -268,11 +271,11 @@ def create_sim(fid,
                           format(keyname, value, typ))
                     raise e
                 
-        # check struct
+        # check struct, this only checks to see if file s valid.
         try:
             universe = MDAnalysis.Universe(struct)
             print("structure file {} appears OK".format(struct))
-            filedata_fromfile("struct.pdb", struct)
+            
         except Exception, e:
             print("structure file {} is not valid".format(struct))
             raise e
@@ -288,7 +291,29 @@ def create_sim(fid,
         except Exception, e:
             print("error reading periodic boundary conditions")
             raise e
-
+        
+        # we now have a box and a universe, check to see if box is valid size, and 
+        # center atoms in box. 
+        bbox = universe.atoms.bbox()
+        bbox = bbox[1,:] - bbox[0,:]
+        
+        # box should be at least 110% of atomic 
+        if all(box >= 1.1 * bbox):
+            # box is OK, center molecule in box
+            print("centering molecule in box, new center of mass will be {}".format(box / 2))
+            trans = box / 2 - universe.atoms.centerOfMass()
+            universe.atoms.translate(trans)
+            fd, centered_struct = tempfile.mkstemp(suffix=".pdb")
+            writer = MDAnalysis.Writer(centered_struct)
+            struct = centered_struct
+            writer.write(universe)
+            writer.close()
+            del writer
+            os.close(fd)
+        else:
+            raise ValueError("The given box, {} needs to be at least 110% of the molecule extents, {}".
+                             format(box, bbox))
+        
         attr(CG_STEPS, int, cg_steps)
         attr(DT, float, dt)
         attr(TEMPERATURE, float, temperature)
@@ -398,6 +423,9 @@ def create_sim(fid,
             raise e
 
         hdf.create_group("timesteps")
+        
+        # clean up temp centered struct path
+        os.remove(centered_struct)
         print("creation of simulation file {} complete".format(fid))
         
 
