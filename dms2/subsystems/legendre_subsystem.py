@@ -91,6 +91,10 @@ class LegendreSubsystem(subsystems.SubSystem):
         this is called just after the structure is equilibriated, this is the starting struct
         for the MD runs, this is to calculate basis.
         """
+        boxboundary = self.atoms.bbox()
+        self.box = (boxboundary[1,:] - boxboundary[0,:]) * 0.5
+        self.basis = self.Construct_Basis(self.atoms.positions - self.atoms.centerOfMass())  # Update this every CG step for now
+        
         CG = self.ComputeCG(self.atoms.positions)
         CG_Vel = self.ComputeCG(self.atoms.velocities())
         CG_For = self.ComputeCG_Forces(self.atoms.forces)
@@ -98,10 +102,6 @@ class LegendreSubsystem(subsystems.SubSystem):
         self.CG = np.reshape(CG.T,(CG.shape[0]*CG.shape[1]))
         self.CG_Vel = np.reshape(CG_Vel.T,(CG_Vel.shape[0]*CG_Vel.shape[1]))
         self.CG_For = np.reshape(CG_For.T,(CG_For.shape[0]*CG_For.shape[1]))
-        
-        boxboundary = self.atoms.bbox()
-        self.box = (boxboundary[1,:] - boxboundary[0,:]) * 0.5
-        self.basis = self.Construct_Basis(self.atoms.positions - self.atoms.centerOfMass())  # Update this every CG step for now
         
     def ComputeCGInv(self,CG):
         """
