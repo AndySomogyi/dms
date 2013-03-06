@@ -65,12 +65,12 @@ class LegendreSubsystem(subsystems.SubSystem):
         CG = self.ComputeCG(self.atoms.positions)
         CG_Vel = self.ComputeCG(self.atoms.velocities())
         CG_For = self.ComputeCG_Forces(self.atoms.forces)
-
-        self.CG = np.reshape(CG.T,(CG.shape[0]*CG.shape[1]))
-        self.CG_Vel = np.reshape(CG_Vel.T,(CG_Vel.shape[0]*CG_Vel.shape[1]))
-        self.CG_For = np.reshape(CG_For.T,(CG_For.shape[0]*CG_For.shape[1]))
         
-        return (self.CG,self.CG_Vel,self.CG_For)
+        CG = np.reshape(CG.T,(CG.shape[0]*CG.shape[1]))
+        CG_Vel = np.reshape(CG_Vel.T,(CG_Vel.shape[0]*CG_Vel.shape[1]))
+        CG_For = np.reshape(CG_For.T,(CG_For.shape[0]*CG_For.shape[1]))
+        
+        return (CG,CG_Vel,CG_For)
         
     def translate(self, dCG):
         """
@@ -80,8 +80,8 @@ class LegendreSubsystem(subsystems.SubSystem):
         
         @param CG: a length N_cg 1D array.  
         """
-        self.residuals = self.ComputeResiduals(self.CG)
-        self.atoms.positions = self.atoms.centerOfMass() + self.ComputeCGInv(self.CG + dCG) + self.residuals
+        #self.residuals = self.ComputeResiduals(self.CG)
+        self.atoms.positions += self.ComputeCGInv(dCG) #+ self.residuals
         
     def minimized(self):
         pass
@@ -91,6 +91,14 @@ class LegendreSubsystem(subsystems.SubSystem):
         this is called just after the structure is equilibriated, this is the starting struct
         for the MD runs, this is to calculate basis.
         """
+        CG = self.ComputeCG(self.atoms.positions)
+        CG_Vel = self.ComputeCG(self.atoms.velocities())
+        CG_For = self.ComputeCG_Forces(self.atoms.forces)
+        
+        self.CG = np.reshape(CG.T,(CG.shape[0]*CG.shape[1]))
+        self.CG_Vel = np.reshape(CG_Vel.T,(CG_Vel.shape[0]*CG_Vel.shape[1]))
+        self.CG_For = np.reshape(CG_For.T,(CG_For.shape[0]*CG_For.shape[1]))
+        
         boxboundary = self.atoms.bbox()
         self.box = (boxboundary[1,:] - boxboundary[0,:]) * 0.5
         self.basis = self.Construct_Basis(self.atoms.positions - self.atoms.centerOfMass())  # Update this every CG step for now
