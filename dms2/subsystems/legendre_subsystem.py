@@ -94,8 +94,6 @@ class LegendreSubsystem(subsystems.SubSystem):
         boxboundary = self.atoms.bbox()
         self.box = (boxboundary[1,:] - boxboundary[0,:]) * 0.5
         self.basis = self.Construct_Basis(self.atoms.positions - self.atoms.centerOfMass())  # Update this every CG step for now
-        np.savetxt('Basis.dat',self.basis)
-        np.savetxt('BoxSize.dat', self.box)
         
     def ComputeCGInv(self,CG):
         """
