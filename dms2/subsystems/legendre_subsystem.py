@@ -112,9 +112,6 @@ class LegendreSubsystem(subsystems.SubSystem):
         
         return np.array([x,y,z]).T
 
-    def COM(self,var):
-        return np.dot(var.T,self.atoms.masses()) / np.sum(self.atoms.masses())
-        
     def ComputeCG(self,var):
         """
         Computes CG momenta or positions
@@ -122,7 +119,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         var could be atomic positions or velocities 
         """
         Utw = self.basis.T * self.atoms.masses()
-        return 2.0 / self.box * np.dot(Utw,var - self.COM(var))
+        return 2.0 / self.box * np.dot(Utw,var)
         
     def ComputeCG_Forces(self, atomic_forces):
         """
