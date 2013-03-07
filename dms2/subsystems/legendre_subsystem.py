@@ -96,12 +96,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         self.basis = self.Construct_Basis(self.atoms.positions - self.atoms.centerOfMass())  # Update this every CG step for now
         
         CG = self.ComputeCG(self.atoms.positions)
-        CG_Vel = self.ComputeCG(self.atoms.velocities())
-        CG_For = self.ComputeCG_Forces(self.atoms.forces)
-        
         self.CG = np.reshape(CG.T,(CG.shape[0]*CG.shape[1]))
-        self.CG_Vel = np.reshape(CG_Vel.T,(CG_Vel.shape[0]*CG_Vel.shape[1]))
-        self.CG_For = np.reshape(CG_For.T,(CG_For.shape[0]*CG_For.shape[1]))
         
     def ComputeCGInv(self,CG):
         """
