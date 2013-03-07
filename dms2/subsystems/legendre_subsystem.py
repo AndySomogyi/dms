@@ -80,8 +80,8 @@ class LegendreSubsystem(subsystems.SubSystem):
         
         @param CG: a length N_cg 1D array.  
         """
-        #self.residuals = self.ComputeResiduals(self.CG)
-        self.atoms.positions += self.ComputeCGInv(dCG) #+ self.residuals
+        self.residuals = self.ComputeResiduals(self.CG)
+        self.atoms.positions = self.ComputeCGInv(self.CG + dCG) + self.residuals
         
     def minimized(self):
         pass
