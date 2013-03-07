@@ -55,7 +55,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         self.atoms = universe.selectAtoms(self.select)
 
     def ComputeResiduals(self,CG):
-        return self.atoms.positions - self.ComputeCGInv(CG)
+        return self.EqAtomPos - self.ComputeCGInv(CG)
         
     def frame(self):
         """
@@ -98,6 +98,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         
         CG = self.ComputeCG(self.atoms.positions)
         self.CG = np.reshape(CG.T,(CG.shape[0]*CG.shape[1]))
+        self.EqAtomPos = self.atoms.positions
         
     def ComputeCGInv(self,CG):
         """
