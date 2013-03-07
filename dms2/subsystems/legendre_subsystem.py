@@ -63,7 +63,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         """
 
         CG = self.ComputeCG(self.atoms.positions)
-        CG_Vel = self.ComputeCG(self.atoms.velocities())
+        CG_Vel = self.ComputeCG(.0 * self.atoms.velocities())
         CG_For = self.ComputeCG_Forces(self.atoms.forces)
         
         CG = np.reshape(CG.T,(CG.shape[0]*CG.shape[1]))
