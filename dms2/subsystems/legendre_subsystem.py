@@ -82,6 +82,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         """
         self.residuals = self.ComputeResiduals(self.CG)
         self.atoms.positions = self.ComputeCGInv(self.CG + dCG) + self.residuals
+        # or self.atoms.positions += self.ComputeCGInv(dCG)
         
     def minimized(self):
         pass
