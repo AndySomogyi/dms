@@ -250,15 +250,15 @@ class System(object):
     
     @property
     def mn_args(self):
-        return dict(zip(self.config[MN_ARGS + KEYS], self.config[MN_ARGS + VALUES]))
+        return util.hdf_dict(self.config, MN_ARGS)
     
     @property
     def eq_args(self):
-        return dict(zip(self.config[EQ_ARGS + KEYS], self.config[EQ_ARGS + VALUES]))
+        return util.hdf_dict(self.config, EQ_ARGS)
     
     @property
     def md_args(self):
-        return dict(zip(self.config[MD_ARGS + KEYS], self.config[MD_ARGS + VALUES]))
+        return util.hdf_dict(self.config, MD_ARGS)
     
     @property 
     def should_solvate(self):

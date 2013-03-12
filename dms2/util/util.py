@@ -16,6 +16,8 @@ import numpy as n
 
 import MDAnalysis                           #@UnresolvedImport
 import MDAnalysis.core                      #@UnresolvedImport
+import dms2.config
+
 
 def fix_periodic_boundary_conditions(u):
     box = u.trajectory.ts.dimensions[:3]
@@ -109,6 +111,27 @@ def hdf_linksrc(hdf, newname, src):
     
     print("links.create_soft({}, {})".format(newname, src))
     hdf.id.links.create_soft(newname, src)
+    
+def hdf_value_from_string(s):
+    """
+    As we currently store dictionaries in the hdf file, everything gets 
+    converted to a string UGLY!!!. This function tries to recast them
+    as the original data type, currenly we support ints and floats. 
+    """
+    try:
+        return int(s)
+    except ValueError:
+        pass
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    return str(s)
+
+def hdf_dict(attrs, key_base_name):
+    return dict(zip(attrs[key_base_name + dms2.config.KEYS], 
+                    [hdf_value_from_string(s) for s in attrs[key_base_name + dms2.config.VALUES]]))
+    
     
 def get_class( klass ):
     """
