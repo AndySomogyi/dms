@@ -60,8 +60,8 @@ epsilon_rf               = 1
 ;   NBOND VATOM VSWI CTONNB 10.0 CTOFNB 12.0 CUTNB 14.0
 vdw-type                 = Switch
 ; cut-off lengths       
-rvdw-switch              = 1.0
-rvdw                     = 1.2
+rvdw-switch              = 1.2
+rvdw                     = 1.5
 ; Apply long range dispersion corrections for Energy and Pressure 
 ;   NBOND LRC
 DispCorr                 = EnerPres
