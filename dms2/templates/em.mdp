@@ -37,6 +37,7 @@ rlist                    = 1.0
 rcoulomb                 = 1.0
 rvdw                     = 1.2
 rvdw-switch              = 1.0
+rlistlong                = 1.2
 
 Tcoupl                   = no
 Pcoupl                   = no
