@@ -13,7 +13,7 @@ cpp            = cpp
 include        = -I. -I.. -I../top
 define         = -DFLEXIBLE
 
-integrator     = l-bfgs
+integrator     = cg
 emtol          = 10
 emstep         = 0.01
 nsteps         = 1000
