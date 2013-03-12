@@ -63,7 +63,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         """
 
         CG = self.ComputeCG(self.atoms.positions)
-        CG_Vel = self.ComputeCG(.0 * self.atoms.velocities())
+        CG_Vel = self.ComputeCG(self.atoms.velocities())
         CG_For = self.ComputeCG_Forces(self.atoms.forces)
         
         CG = np.reshape(CG.T,(CG.shape[0]*CG.shape[1]))
@@ -148,10 +148,10 @@ class LegendreSubsystem(subsystems.SubSystem):
             Basis[:,i] = px * py * pz
             
         WBasis = Basis * np.sqrt(Masses)
-        WBasis = QR_Decomp(WBasis, 'unormalized')
-        WBasis /= np.sqrt(Masses)
+        QBasis = QR_Decomp(WBasis, 'unormalized')
+        QBasis /= np.sqrt(Masses)
         
-        return WBasis
+        return QBasis
 
 def QR_Decomp(V,dtype):
     """ 
