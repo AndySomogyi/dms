@@ -55,7 +55,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         self.atoms = universe.selectAtoms(self.select)
 
     def ComputeResiduals(self,CG):
-        return self.atoms.positions - self.ComputeCGInv(CG)
+        return self.EqAtomPos - self.ComputeCGInv(CG)
         
     def frame(self):
         """
@@ -63,7 +63,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         """
 
         CG = self.ComputeCG(self.atoms.positions)
-        CG_Vel = self.ComputeCG(self.atoms.velocities())
+        CG_Vel = self.ComputeCG(.0 * self.atoms.velocities())
         CG_For = self.ComputeCG_Forces(self.atoms.forces)
         
         CG = np.reshape(CG.T,(CG.shape[0]*CG.shape[1]))
@@ -80,8 +80,9 @@ class LegendreSubsystem(subsystems.SubSystem):
         
         @param CG: a length N_cg 1D array.  
         """
-        #self.residuals = self.ComputeResiduals(self.CG)
-        self.atoms.positions += self.ComputeCGInv(dCG) #+ self.residuals
+        self.residuals = self.ComputeResiduals(self.CG)
+        self.atoms.positions = self.ComputeCGInv(self.CG + dCG) + self.residuals
+        # or self.atoms.positions += self.ComputeCGInv(dCG)
         
     def minimized(self):
         pass
@@ -97,6 +98,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         
         CG = self.ComputeCG(self.atoms.positions)
         self.CG = np.reshape(CG.T,(CG.shape[0]*CG.shape[1]))
+        self.EqAtomPos = self.atoms.positions
         
     def ComputeCGInv(self,CG):
         """
@@ -112,9 +114,6 @@ class LegendreSubsystem(subsystems.SubSystem):
         
         return np.array([x,y,z]).T
 
-    def COM(self,var):
-        return np.dot(var.T,self.atoms.masses()) / np.sum(self.atoms.masses())
-        
     def ComputeCG(self,var):
         """
         Computes CG momenta or positions
@@ -122,7 +121,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         var could be atomic positions or velocities 
         """
         Utw = self.basis.T * self.atoms.masses()
-        return 2.0 / self.box * np.dot(Utw,var - self.COM(var))
+        return 2.0 / self.box * np.dot(Utw,var)
         
     def ComputeCG_Forces(self, atomic_forces):
         """

@@ -124,7 +124,7 @@ DEFAULT_MD_ARGS = { "mdp":"md_CHARMM27.mdp",  # the default mdp template
                     "nstxout": 10,    # trr pos
                     "nstvout": 10,    # trr veloc
                     "nstfout": 10,    # trr forces
-                    "dt" : 0.001
+                    "dt":      0.001  # trr time step (1fs = 0.001ps)
                     }
 
 DEFAULT_EQ_ARGS = { "mdp":"md_CHARMM27.mdp",  # the default mdp template 
