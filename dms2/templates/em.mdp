@@ -11,13 +11,20 @@
 
 cpp            = cpp
 include        = -I. -I.. -I../top
-define         = -DFLEXSPC
+define         = -DFLEXIBLE
 
-integrator     = steep
-emtol          = 500
+integrator     = cg
+emtol          = 10
 emstep         = 0.01
 nsteps         = 1000
 nstcgsteep     = 100
+nstxout         = 10 ; Writing full precision coordinates every nanosecond
+nstvout         = 10 ; Writing velocities every nanosecond
+nstlog          = 10  ; Writing to the log file every step
+nstenergy  = 1000  ; Writing out energy information every step
+nstxtcout	= 1000  ; Writing coordinates every 5 ps
+;energygrps     = System        ; Which energy group(s) to write to disk
+
 
 constraints              = none
 nstcomm                  = 1
@@ -28,11 +35,12 @@ optimize_fft             = no
 ns_type                  = grid
 rlist                    = 1.0
 rcoulomb                 = 1.0
-rvdw                     = 1.0
-rvdw-switch              = 0.8
+rvdw                     = 1.2
+rvdw-switch              = 1.0
+rlistlong                = 1.2
 
 Tcoupl                   = no
 Pcoupl                   = no
 gen_vel                  = no
 
-nstxout                  = 0 ; write coords every # step
+pbc                      = xyz
