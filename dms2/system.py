@@ -645,7 +645,7 @@ class System(object):
         
         if struct is None or top is None:
             logging.info("performing minimization with self.universe and self.top")
-            with md.minimize(struct=self.struct, \
+            with md.minimize(struct=self.universe, \
                                  top=self.top, \
                                  top_includes=self.top_includes, \
                                  nsteps=self.config[MN_STEPS], \
