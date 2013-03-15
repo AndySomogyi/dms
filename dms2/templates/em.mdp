@@ -42,5 +42,3 @@ rlistlong                = 1.2
 Tcoupl                   = no
 Pcoupl                   = no
 gen_vel                  = no
-
-pbc                      = xyz
