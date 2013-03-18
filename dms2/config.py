@@ -128,7 +128,8 @@ DEFAULT_MD_ARGS = { "mdp":"md_CHARMM27.mdp",  # the default mdp template
                     }
 
 DEFAULT_EQ_ARGS = { "mdp":"md_CHARMM27.mdp",  # the default mdp template 
-                    "define":"-DPOSRES" # do position restrained md for equilibriation
+                    "define":"-DPOSRES", # do position restrained md for equilibriation
+                    "dt": 0.001 # trr time step (1fs = 0.001ps)
                     }
 
 
