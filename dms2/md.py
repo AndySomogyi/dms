@@ -178,6 +178,11 @@ def minimize(struct, top, top_includes, dirname=None,
     logging.info("using mdp template {} from key {}".format(config.templates[mdp], mdp))
     mdp = config.templates[mdp]
     
+    # this stop grompp from failing if there are warning. 
+    # TODO, is this the best place to put this, should this be in in 
+    # config.py ????
+    kwargs.setdefault('maxwarn', -1)
+    
     # gromacs.setup.energy_minimize returns
     # { 'struct': final_struct,
     #   'top': topology,
