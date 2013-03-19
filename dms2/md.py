@@ -272,9 +272,15 @@ def setup_md(struct, top, top_includes, deffnm="md", dirname=None, mdp="md_CHARM
         logging.debug("copying file {} to {}".format(i,dirname))
         data_tofile(i,dirname=dirname)
     
-    
+    # required from gromacswrapper, if this is not set, it will fail as it expects
+    # a queing systme. 
     kwargs.setdefault('qname', None)
-
+    
+    # this stop grompp from failing if there are warning. 
+    # TODO, is this the best place to put this, should this be in in 
+    # config.py ????
+    kwargs.setdefault('maxwarn', -1)
+    
     logging.info("using mdp template {} from key {}".format(config.templates[mdp], mdp))
     mdp = config.templates[mdp]
 
