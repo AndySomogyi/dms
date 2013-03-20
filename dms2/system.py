@@ -480,6 +480,7 @@ class System(object):
                                top_includes=self.top_includes, \
                                nsteps=self.config[EQ_STEPS], \
                                deffnm="eq", \
+                               mainselection=self.mainselection, \
                                **self.eq_args)
     
     def setup_md(self, struct=None, top=None):
@@ -501,7 +502,7 @@ class System(object):
                                nsteps=self.config[MD_STEPS], \
                                multi=self.config[MULTI], \
                                deffnm="md", \
-                               mainselection=None \
+                               mainselection=self.mainselection, \
                                **self.md_args)
         
     def equilibriate(self, struct=None, top=None, sub=None, **args):
