@@ -270,7 +270,7 @@ class System(object):
     
     @property
     def mainselection(self):
-        return float(self.config[MAINSELECTION])
+        return self.config[MAINSELECTION]
     
     def integrator(self):
         """
