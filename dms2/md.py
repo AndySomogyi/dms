@@ -194,7 +194,8 @@ def minimize(struct, top, top_includes, dirname=None,
     result["dirname"] = dirname
     return MDManager(result)
     
-def setup_md(struct, top, top_includes, deffnm="md", dirname=None, mdp="md_CHARMM27.mdp", **kwargs):
+def setup_md(struct, top, top_includes, deffnm="md", dirname=None, mdp="md_CHARMM27.mdp", 
+             mainselection=None, **kwargs):
     """Set up Gromacs MD run..
 
     Additional itp files should be in the same directory as the top file.
@@ -291,7 +292,8 @@ def setup_md(struct, top, top_includes, deffnm="md", dirname=None, mdp="md_CHARM
 
     logging.debug("calling _setup_MD with kwargs: {}".format(kwargs))
     
-    setup_MD = gromacs.setup._setup_MD(dirname, struct=struct, top=top, deffnm=deffnm, mdp=mdp, **kwargs)
+    setup_MD = gromacs.setup._setup_MD(dirname, struct=struct, top=top, deffnm=deffnm, mdp=mdp, 
+                                       mainselection=mainselection, **kwargs)
     
     setup_MD["dirname"] = dirname
     
@@ -441,14 +443,11 @@ def solvate(struct, top, box = None,
     return MDManager(result)
     
     
-def run_md(dirname, sub=None, md_runner=MDrunner, **kwargs):
+def run_md(dirname, md_runner=MDrunner, **kwargs):
     """
     actually perform the md run.
     
     does not alter class state, only the file system is changed
-    
-    @param sub: Path to an index (.ndx) which will be used to strip off everything
-        in the resulting trajectories except the atoms in the specified by the sub index. 
     
     @param kwargs: a dictionary of arguments that are passed to mdrun.
     

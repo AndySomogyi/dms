@@ -268,6 +268,10 @@ class System(object):
     def cg_steps(self):
         return int(self.config[CG_STEPS])
     
+    @property
+    def mainselection(self):
+        return float(self.config[MAINSELECTION])
+    
     def integrator(self):
         """
         Create an integrator based on what the config file specified. 
@@ -497,6 +501,7 @@ class System(object):
                                nsteps=self.config[MD_STEPS], \
                                multi=self.config[MULTI], \
                                deffnm="md", \
+                               mainselection=self.mainselection \
                                **self.md_args)
         
     def equilibriate(self, struct=None, top=None, sub=None, **args):
@@ -616,7 +621,7 @@ class System(object):
             topology files, as well as a 'sub' index which will be used to later
             pick out the original unsolvated atoms.
         """
-        return md.solvate(self.universe, self.top)
+        return md.solvate(self.universe, self.top, mainselection=self.mainselection)
         
     def minimize(self, struct = None, top = None, sub = None, **args):
         """

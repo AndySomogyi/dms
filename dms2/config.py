@@ -24,6 +24,7 @@ import h5py                             #@UnresolvedImport
 import md
 import util
 import collections
+import logging
 
 
 def _generate_template_dict(dirname):
@@ -116,6 +117,7 @@ TEMPERATURE="temperature"
 DT = "dt"
 INTEGRATOR = "integrator"
 INTEGRATOR_ARGS = "integrator_args"
+MAINSELECTION = "mainselection"
 
 
 DEFAULT_MN_ARGS = {"mdp":"em.mdp"}
@@ -219,6 +221,8 @@ def create_sim(fid,
                should_solvate = False,
                ndx=None,
                include_dirs=[],
+               mainselection = '"Protein"',
+               debug=False,
                **kwargs):
     """
     Create the simulation file
@@ -228,6 +232,9 @@ def create_sim(fid,
     
     import gromacs
     
+    if debug:
+        os.environ["DMS_DEBUG"] = "TRUE"
+    
     # need to create a universe to read various bits for the config, and
     # to test subsystem creation, so keep it around for this func, 
     # plus, makeing a universe is a sure fire way to see if we have a valid 
@@ -236,6 +243,8 @@ def create_sim(fid,
     
     # path of centered struct
     centered_struct = None
+    
+    set_tempdir(fid)
     
     with h5py.File(fid, "w") as hdf:
         conf = hdf.create_group("config").attrs
@@ -324,6 +333,7 @@ def create_sim(fid,
         attr(MULTI, int, multi)
         attr(EQ_STEPS, int, eq_steps)
         attr(SHOULD_SOLVATE, int, should_solvate)
+        attr(MAINSELECTION, str, mainselection)
 
         attr(MN_ARGS, dict, mn_args)
         attr(EQ_ARGS, dict, eq_args)
@@ -385,7 +395,7 @@ def create_sim(fid,
                 # convert Angstrom to Nm, GROMACS works in Nm, and
                 # we use MDAnalysis which uses Angstroms
                 print("attempting auto solvation...")
-                with md.solvate(struct=struct, top=top, box=box/10.0):
+                with md.solvate(struct=struct, top=top, box=box/10.0, mainselection=mainselection):
                     # solvate returns 
                     # {'ndx': '/home/andy/tmp/Au/solvate/main.ndx', 
                     # 'mainselection': '"Protein"', 
@@ -429,6 +439,26 @@ def create_sim(fid,
         # clean up temp centered struct path
         os.remove(centered_struct)
         print("creation of simulation file {} complete".format(fid))
+        
+        
+def set_tempdir(f):
+    """ 
+    get the absolute path of the directory containing the given file name, 
+    and set the tmpdir env var to point to this dir. 
+    """
+    abspath = os.path.abspath(f)
+    d = os.path.split(abspath)[0]
+    
+    # make sure this is an actual directory
+    if not os.path.isdir(d):
+        raise ValueError("Error, the file {} is not located in a valid directory {}".format(f,d))
+
+    # names that os.gettempdir looks at
+    os.environ["TMPDIR"] = d
+    os.environ["TEMP"] = d
+    os.environ["TMP"] = d
+    tempfile.tempdir = d
+    logging.info("tempdir for MD runs will be {}".format(tempfile.gettempdir()))
         
 
 

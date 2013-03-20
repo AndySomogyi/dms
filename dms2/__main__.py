@@ -16,26 +16,6 @@ import os.path
 import argparse
 import logging
 
-
-def _set_tempdir(f):
-    """ 
-    get the absolute path of the directory containing the given file name, 
-    and set the tmpdir env var to point to this dir. 
-    """
-    abspath = os.path.abspath(f)
-    d = os.path.split(abspath)[0]
-    
-    # make sure this is an actual directory
-    if not os.path.isdir(d):
-        raise ValueError("Error, the file {} is not located in a valid directory {}".format(f,d))
-
-    # names that os.gettempdir looks at
-    os.environ["TMPDIR"] = d
-    os.environ["TEMP"] = d
-    os.environ["TMP"] = d
-    tempfile.tempdir = d
-    logging.info("tempdir for MD runs will be {}".format(tempfile.gettempdir()))
-
 def make_parser():
     """
     Create the argument parser that processes all the DMS command line arguments.
@@ -135,6 +115,15 @@ def make_parser():
     ap.add_argument("-solvate", dest="should_solvate", action="store_true",
                     help="should the system be auto-solvated, if this is set, struct must NOT contain solvent. "
                     "defaults to False. This is a boolean flag, to enable, just add \'-solvate\' with no args.")
+    
+    ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
+    
+    ap.add_argument("-mainselection", default="Protein", 
+                    help="The name of make_ndx group which is used for the main selection. This should"
+                    " be a group that consists of the non solvent molecules. \"Protein\" usually works when "
+                    "simulating protein, however another selection command is required when simulationg lipids. "
+                    "To find this out, either run dms2 config, and an error will pop up informing you of the available "
+                    "groups, or run make_ndx to get a list.")
 
     ap.set_defaults(__func__=config.create_sim)
     
@@ -164,6 +153,7 @@ def make_parser():
                     help="x,y,z values of the system box in Angstroms. "
                          "If box is not given, the system size is read from the CRYST line "
                          "in the structure pdb.")
+    ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
     ap.set_defaults(__func__=config.create_sol)
 
     
@@ -176,7 +166,7 @@ def make_parser():
     ap.add_argument("sys", help="name of simulation file")
     ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
     def run(sys, debug) :
-        _set_tempdir(sys)
+        config.set_tempdir(sys)
         if debug:
             os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
@@ -191,7 +181,7 @@ def make_parser():
     ap.add_argument("sys", help="name of simulation file")
     ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
     def sol(sys, debug) :
-        _set_tempdir(sys)
+        config.set_tempdir(sys)
         if debug:
             os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
@@ -208,7 +198,7 @@ def make_parser():
     ap.add_argument("-sol", action="store_true", help="auto solvate before minimization")
     ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
     def mn(sys, sol, debug):
-        _set_tempdir(sys)
+        config.set_tempdir(sys)
         if debug:
             os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
@@ -229,7 +219,7 @@ def make_parser():
     ap.add_argument("-sol", action="store_true", help="auto solvate between steps")
     ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
     def mneq(sys,sol,debug) :
-        _set_tempdir(sys)
+        config.set_tempdir(sys)
         if debug:
             os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
@@ -252,7 +242,7 @@ def make_parser():
     ap.add_argument("-sol", action="store_true", help="auto solvate between steps")
     ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
     def mneqmd(sys,sol,debug) :
-        _set_tempdir(sys)
+        config.set_tempdir(sys)
         if debug:
             os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
@@ -278,7 +268,7 @@ def make_parser():
     ap.add_argument("-sol", action="store_true", help="auto solvate between steps")
     ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
     def eq(sys,debug) :
-        _set_tempdir(sys)
+        config.set_tempdir(sys)
         if debug:
             os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
@@ -297,7 +287,7 @@ def make_parser():
     ap.add_argument("sys", help="name of simulation file")
     ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
     def atomistic_step(sys,debug) :
-        _set_tempdir(sys)
+        config.set_tempdir(sys)
         if debug:
             os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
@@ -311,7 +301,7 @@ def make_parser():
     ap.add_argument("sys", help="name of simulation file")
     ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
     def step(sys,debug) :
-        _set_tempdir(sys)
+        config.set_tempdir(sys)
         if debug:
             os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
@@ -324,7 +314,7 @@ def make_parser():
     ap.add_argument("-sol", action="store_true", help="auto solvate before md")
     ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
     def md(sys,sol,debug) :
-        _set_tempdir(sys)
+        config.set_tempdir(sys)
         if debug:
             os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
@@ -342,7 +332,7 @@ def make_parser():
     ap.add_argument("sys", help="name of simulation file")
     ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
     def cg_step(sys,debug) :
-        _set_tempdir(sys)
+        config.set_tempdir(sys)
         if debug:
             os.environ["DMS_DEBUG"] = "TRUE"
         s=system.System(sys, "a")
