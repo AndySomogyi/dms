@@ -501,7 +501,7 @@ class System(object):
                                nsteps=self.config[MD_STEPS], \
                                multi=self.config[MULTI], \
                                deffnm="md", \
-                               mainselection=self.mainselection \
+                               mainselection=None \
                                **self.md_args)
         
     def equilibriate(self, struct=None, top=None, sub=None, **args):
