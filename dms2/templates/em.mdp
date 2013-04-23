@@ -18,11 +18,10 @@ emtol          = 10
 emstep         = 0.01
 nsteps         = 1000
 nstcgsteep     = 100
-nstxout         = 10 ; Writing full precision coordinates every nanosecond
-nstvout         = 10 ; Writing velocities every nanosecond
-nstlog          = 10  ; Writing to the log file every step
+;nstxout         = 10 ; Writing full precision coordinates every nanosecond
+;nstvout         = 10 ; Writing velocities every nanosecond
+;nstlog          = 10  ; Writing to the log file every step
 nstenergy  = 1000  ; Writing out energy information every step
-nstxtcout	= 1000  ; Writing coordinates every 5 ps
 ;energygrps     = System        ; Which energy group(s) to write to disk
 
 
@@ -30,7 +29,7 @@ constraints              = none
 nstcomm                  = 1
 vdwtype                  = shift   ; use shift for L-BFGS
 coulombtype              = PME
-optimize_fft             = no
+optimize_fft             = yes
 
 ns_type                  = grid
 rlist                    = 1.0
