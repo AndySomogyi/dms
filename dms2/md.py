@@ -560,6 +560,8 @@ def top_includes(top, include_dirs=["."]):
     includes = []
     r=re.compile("^\s*#\s*include\s*\"(.*?)\"\s*")
     
+    logging.debug("scaning includes for top level topology file {}".format(top))
+    
     def isfile(f):
         for d in include_dirs:
             j=os.path.join(d, f)
@@ -567,12 +569,31 @@ def top_includes(top, include_dirs=["."]):
                 return j
         return False
     
-    for line in open(top):
-        match = r.match(line)
-        if match:
-            f=isfile(match.group(1))
-            if f:        
-                includes.append(f)
+    def get_includes(f):    
+        logging.debug("recursivly scanning includes for file {}".format(f))
+        
+       
+        with open(f) as of:
+            for line in of:
+                match = r.match(line)
+                if match:
+                    f=isfile(match.group(1))
+                    if f:  
+                        # first check if we have been here already (cyclic includes)
+                        try:
+                            includes.index(f)
+                            logging.warn("encountered cyclic includes, the file {} has already been included"
+                                         ", unknown if this will work with GROMACS???".format(f))
+                            logging.warn("ignoring file {} as its already included".format(f))
+                        except ValueError:
+                            # ugly way of checking if an item is in a list, but hey, geuss this is the Python way...
+                            # we've not encountered this file before, so good to go.
+                            includes.append(f)
+                            get_includes(f)
+                    else:
+                        logging.debug("found include file {}, but it is not in the include path".format(match.group(1)))
+                    
+    get_includes(top)
     return includes
     
     
