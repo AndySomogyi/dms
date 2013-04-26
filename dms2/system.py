@@ -622,7 +622,8 @@ class System(object):
             topology files, as well as a 'sub' index which will be used to later
             pick out the original unsolvated atoms.
         """
-        return md.solvate(self.universe, self.top, mainselection=self.mainselection)
+        return md.solvate(struct=self.universe, top=self.top, top_includes = self.top_includes, 
+                          mainselection=self.mainselection)
         
     def minimize(self, struct = None, top = None, sub = None, **args):
         """

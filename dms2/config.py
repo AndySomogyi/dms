@@ -374,7 +374,7 @@ def create_sim(fid,
                     # convert Angstrom to Nm, GROMACS works in Nm, and
                     # we use MDAnalysis which uses Angstroms
                     print("attempting auto solvation...")
-                    with md.solvate(box=box/10.0, **top):
+                    with md.solvate(top_includes=top_includes.values(), box=box/10.0, **top):
                         # solvate returns 
                         # {'ndx': '/home/andy/tmp/Au/solvate/main.ndx', 
                         # 'mainselection': '"Protein"', 
@@ -395,7 +395,8 @@ def create_sim(fid,
                 # convert Angstrom to Nm, GROMACS works in Nm, and
                 # we use MDAnalysis which uses Angstroms
                 print("attempting auto solvation...")
-                with md.solvate(struct=struct, top=top, box=box/10.0, mainselection=mainselection):
+                with md.solvate(struct=struct, top=top, top_includes=top_includes.values(), 
+                                box=box/10.0, mainselection=mainselection):
                     # solvate returns 
                     # {'ndx': '/home/andy/tmp/Au/solvate/main.ndx', 
                     # 'mainselection': '"Protein"', 

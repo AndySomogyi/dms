@@ -322,7 +322,7 @@ def topology(struct, protein="protein", dirname="top", ff="charmm27", water="spc
     return MDManager(result)
         
     
-def solvate(struct, top, box = None,
+def solvate(struct, top, top_includes=None, box = None,
             concentration=0, cation='NA', anion='CL',
             water='spc', solvent_name='SOL', with_membrane=False,
             ndx = 'main.ndx', mainselection = '"Protein"',
@@ -362,7 +362,8 @@ def solvate(struct, top, box = None,
 
           If set to ``None`` it will ignore *distance* and use the box
           inside the *struct* file.
-      *box* : If the struct is an MDAnalysis obj, the box is obtained from the
+      *box* : May be either an numpy array, or a list. 
+          If the struct is an MDAnalysis obj, the box is obtained from the
           MDAnalysis trajectory. 
           .
       *angles*
@@ -410,6 +411,9 @@ def solvate(struct, top, box = None,
     if box is None and isinstance(struct, MDAnalysis.core.AtomGroup.Universe):
         # convert to nm
         box = struct.trajectory.ts.dimensions[:3] / 10.0 
+    else:
+        if not (isinstance(box, numpy.ndarray) or isinstance(box, list)) or len(box) != 3:
+            raise ValueError("box must be either a length 3 numpy array or list")
     
     # build the substitution index.
     # TODO: Verify that solvate only adds atoms after the dry structure
@@ -430,17 +434,35 @@ def solvate(struct, top, box = None,
         
     top = data_tofile(top, "src.top", dirname=dirname)
     
+    # dump the included itp files to the dir where solvation occurs. 
+    logging.debug("top_includes: {}".format(top_includes))
+    for i in top_includes:
+        logging.debug("copying file {} to {}".format(i,dirname))
+        data_tofile(i,dirname=dirname)
+    
     result = gromacs.setup.solvate(struct, top,
-            1.0, "cubic", 
+            1.0, "triclinic", 
             concentration, cation, anion,
             water, solvent_name, with_membrane,
             ndx, mainselection,
-            dirname, box="{} {} {}".format(*box))
+            dirname, box=list(box))
     result["dirname"] = dirname
     result["top"] = top
     result["sub"] = sub 
     
     return MDManager(result)
+
+def tsol(struct, top, box,
+         concentration=0, cation='NA', anion='CL',
+            water='spc', solvent_name='SOL', with_membrane=False,
+            ndx = 'main.ndx', mainselection = '"Protein"',
+            dirname=None, deffnm='sol',):
+    gromacs.setup.solvate(struct, top,
+            1.0, "triclinic", 
+            concentration, cation, anion,
+            water, solvent_name, with_membrane,
+            ndx, mainselection,
+            dirname, box=list(box), angles=[90,90,90])
     
     
 def run_md(dirname, md_runner=MDrunner, **kwargs):
@@ -595,6 +617,10 @@ def top_includes(top, include_dirs=["."]):
                     
     get_includes(top)
     return includes
+
+
+
+#tsol(struct='src.pdb', top='src.top', box=[5, 10, 15], dirname=".")
     
     
         
