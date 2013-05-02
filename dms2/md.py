@@ -104,8 +104,12 @@ class MDrunner(gromacs.run.MDrunner):
         
         if os.environ.get("SLURM_NPROCS", None) is not None or \
             os.environ.get('PBS_JOBID', None) is not None:
-            logging.debug("running in SLURM or PBS, not specifying nprocs")
+            logging.info("running in SLURM or PBS, not specifying nprocs")
             return ["mpiexec"]
+        elif os.environ.get("DMS_NPROCS", None) is not None:
+            logging.info("user specified number of DMS processors: {}".format(os.environ.get("DMS_NPROCS", None)))
+            nprocs = int(os.environ.get("DMS_NPROCS", None))
+            return ["mpiexec", "-n", str(nprocs)]
         else:
             nprocs = os.sysconf('SC_NPROCESSORS_ONLN')
             logging.debug("determined nprocs is {} fron os.sysconf".format(nprocs))
