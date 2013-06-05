@@ -104,10 +104,10 @@ def make_parser():
                     help="number of timesteps to run equilibriation")
 
     ap.add_argument("-mn_args", default=config.DEFAULT_MN_ARGS, 
-                    help="additional parameters to be changed in the minimization options")
+                    help="additional parameters to be changed in the minimization options", type=eval)
 
-    ap.add_argument("-eq_args", default=config.DEFAULT_EQ_ARGS)
-    ap.add_argument("-md_args", default=config.DEFAULT_MD_ARGS)
+    ap.add_argument("-eq_args", default=config.DEFAULT_EQ_ARGS, type=eval)
+    ap.add_argument("-md_args", default=config.DEFAULT_MD_ARGS, type=eval)
 
     ap.add_argument("-ndx", default=None, 
                     help="name of index file")
