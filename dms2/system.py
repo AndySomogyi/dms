@@ -494,9 +494,7 @@ class System(object):
 
         @return an MDManager object loaded with the trr to run an equilibriation.
         """
-        logging.debug( \
-                       "struct = {}, top = {}, sub = {}, args = {}".format( \
-                       struct, top ))
+        logging.debug("struct = {}, top = {}".format(struct, top ))
 
         if struct is None or top is None:
             struct = self.universe
