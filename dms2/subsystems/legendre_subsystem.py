@@ -174,7 +174,7 @@ class LegendreSubsystem(subsystems.SubSystem):
 
         return QBasis
 
-def QR_Decomp(V,dtype):
+def QR_Decomp(V):
     """
     QR_Decomp is an experimental function. Should be eventually deleted.
     """
