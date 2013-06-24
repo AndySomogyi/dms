@@ -75,7 +75,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         """
 
         CG = self.ComputeCG(self.atoms.positions)
-        CG_Vel = self.ComputeCG(self.atoms.velocities())
+        CG_Vel = self.ComputeCG_Vel(self.atoms.velocities())
         CG_For = self.ComputeCG_Forces(self.atoms.forces)
 
         CG = np.reshape(CG.T,(CG.shape[0]*CG.shape[1]))
@@ -133,14 +133,23 @@ class LegendreSubsystem(subsystems.SubSystem):
         var could be atomic positions or velocities
         """
         Utw = self.basis.T * self.atoms.masses()
-        return 2.0 / self.box * np.dot(Utw,var - - np.dot(self.atoms.masses(),var) / np.sum(self.atoms.masses()))
+        return 2.0 / self.box * np.dot(Utw,var - self.atoms.centerOfMass())
+        
+    def ComputeCG_Vel(self,vel):
+        """
+        Computes CG momenta or positions
+        CG = U^t * Mass * var
+        var could be atomic positions or velocities
+        """
+        Utw = self.basis.T * self.atoms.masses()
+        return 2.0 / self.box * np.dot(Utw,vel)
 
     def ComputeCG_Forces(self, atomic_forces):
         """
         Computes CG forces = U^t * <f>
         for an ensemble average atomic force <f>
         """
-        return 2.0 / self.box *  np.dot(self.basis.T, atomic_forces - np.dot(self.atoms.masses(),atomic_forces) / np.sum(self.atoms.masses()))
+        return 2.0 / self.box *  np.dot(self.basis.T, atomic_forces)
 
     def Construct_Basis(self,coords):
         """
@@ -160,7 +169,7 @@ class LegendreSubsystem(subsystems.SubSystem):
             Basis[:,i] = px * py * pz
 
         WBasis = Basis * np.sqrt(Masses)
-        QBasis = QR_Decomp(WBasis, 'unormalized')
+        QBasis = QR_Decomp(WBasis)
         QBasis /= np.sqrt(Masses)
 
         return QBasis
@@ -169,25 +178,9 @@ def QR_Decomp(V,dtype):
     """
     QR_Decomp is an experimental function. Should be eventually deleted.
     """
+    V,R = qr(V, mode='economic')
 
-    if dtype is 'normalized':
-        V,R = - qr(V, mode='economic')
-    else:
-        n,k = V.shape
-
-        for j in xrange(k):
-            U = V[:,j].copy()
-
-            for i in xrange(j):
-                U -= (np.dot(V[:,i],V[:,j]) / np.linalg.norm(V[:,i])**2.0) * V[:,i]
-
-            V[:,j] = U.copy()
-
-        #normalize U; comment the two lines below for orthogonal GS
-        for j in xrange(k):
-            V[:,j] /= np.linalg.norm(V[:,j])
-
-    return V
+    return - V
 
 def poly_indexes(kmax):
     """
