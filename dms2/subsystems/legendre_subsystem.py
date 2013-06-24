@@ -67,7 +67,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         self.atoms.bbox()
 
     def ComputeResiduals(self,CG):
-        return self.EqAtomPos - self.ComputeCGInv(CG)
+        return self.EqAtomPos - (self.ComputeCGInv(CG) + self.atoms.centerOfMass())
 
     def frame(self):
         """
