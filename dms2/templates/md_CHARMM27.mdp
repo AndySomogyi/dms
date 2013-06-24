@@ -1,3 +1,4 @@
+
 ; Template for MD with CHARMM27
 ; (tried to approximate typical CHARMM NBOND options)
 ; http://www.charmm.org/documentation/c35b1/nbonds.html
@@ -14,15 +15,15 @@ define                   =
 integrator               = md
 tinit                    = 0.0
 dt                       = 0.001
-nsteps                   = 100
+nsteps                   = 10000
 
-nstxout                  = 0
-nstvout                  = 0
-nstfout                  = 0
+nstxout                  = 10
+nstvout                  = 10
+nstfout                  = 10
 ; Output frequency for energies to log file and energy file
-nstlog                   = 500
-nstenergy                = 0
-nstcalcenergy            = 0
+nstlog                   = 1000
+nstenergy                = 1000
+nstcalcenergy            = 1000
 
 ; Output frequency and precision for xtc file
 nstxtcout                = 0                ; no need for xtc output
@@ -30,12 +31,12 @@ xtc-precision            = 1000             ; ignored
 
 
 comm-mode                = Linear
-nstcomm                  = 1000
+nstcomm                  = 100
 comm-grps                = SYSTEM
 
 ; NEIGHBORSEARCHING PARAMETERS
 ; nblist update frequency
-nstlist                  = 5
+nstlist                  = 10
 ; ns algorithm (simple or grid)
 ns_type                  = grid
 ; Periodic boundary conditions: xyz, no, xy
@@ -43,25 +44,23 @@ pbc                      = xyz
 periodic_molecules       = no
 ; nblist cut-off
 ; NBOND CUTNB  (see notes on ELEC below)
-; NOTE: rlist cannot be set to 1.4 because Gromacs only allows 
-; rlist == rcoulomb with PME.
-rlist                    = 1.2
+rlist                    = 1.4
 
 ; OPTIONS FOR ELECTROSTATICS AND VDW
 ; Method for doing electrostatics
 ; From the CHARMM docs (ewald.doc):
 ;   NBOND EWALD PMEWald KAPPa 0.34 ORDEr 6 CTOFNB 12.0 CUTNB 14.0
-coulombtype              = PME
-rcoulomb                 = 1.2
+coulombtype              = Reaction-Field
+rcoulomb                 = 1.4
 ; Relative dielectric constant for the medium and the reaction field
 epsilon_r                = 1
-epsilon_rf               = 1
+epsilon_rf               = 78
 ; Method for doing Van der Waals
 ;   NBOND VATOM VSWI CTONNB 10.0 CTOFNB 12.0 CUTNB 14.0
 vdw-type                 = Switch
 ; cut-off lengths       
 rvdw-switch              = 1.0
-rvdw                     = 1.2
+rvdw                     = 1.4
 ; Apply long range dispersion corrections for Energy and Pressure 
 ;   NBOND LRC
 DispCorr                 = EnerPres
@@ -85,9 +84,9 @@ optimize_fft             = yes
 ; OPTIONS FOR WEAK COUPLING ALGORITHMS
 ; Temperature coupling
 tcoupl                   = v-rescale
-tau_t                    = 0.1 0.1
-tc-grps                  = __main__ __environment__
-ref_t                    = 300 300
+tau_t                    = 0.1
+tc-grps                  = System
+ref_t                    = 300
 
 ; Pressure coupling
 pcoupl                   = no       ; no pressure coupling
