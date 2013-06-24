@@ -93,7 +93,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         @param CG: a length N_cg 1D array.
         """
         self.residuals = self.ComputeResiduals(self.CG)
-        self.atoms.positions = self.ComputeCGInv(self.CG + dCG) + self.residuals
+        self.atoms.positions = self.ComputeCGInv(self.CG + dCG) + self.atoms.centerOfMass() + self.residuals
         # or self.atoms.positions += self.ComputeCGInv(dCG)
 
     def minimized(self):
@@ -133,14 +133,14 @@ class LegendreSubsystem(subsystems.SubSystem):
         var could be atomic positions or velocities
         """
         Utw = self.basis.T * self.atoms.masses()
-        return 2.0 / self.box * np.dot(Utw,var)
+        return 2.0 / self.box * np.dot(Utw,var - - np.dot(self.atoms.masses(),var) / np.sum(self.atoms.masses()))
 
     def ComputeCG_Forces(self, atomic_forces):
         """
         Computes CG forces = U^t * <f>
         for an ensemble average atomic force <f>
         """
-        return 2.0 / self.box *  np.dot(self.basis.T, atomic_forces)
+        return 2.0 / self.box *  np.dot(self.basis.T, atomic_forces - np.dot(self.atoms.masses(),atomic_forces) / np.sum(self.atoms.masses()))
 
     def Construct_Basis(self,coords):
         """
