@@ -228,7 +228,7 @@ def LegendreSubsystemFactory(system, selects, *args):
                  if args is [kmax, "resid unique"], an seperate subsystem is
                  created for each residue.
     """
-    kmax = 0, freq = 10
+    kmax, freq = 0, 10
     if len(args) == 2:
         kmax, freq = int(args[0]), int(args[1])
     elif len(args) == 3:
