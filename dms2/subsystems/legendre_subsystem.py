@@ -23,7 +23,7 @@ class LegendreSubsystem(subsystems.SubSystem):
     """
     A set of CG variables.
     """
-    def __init__(self, system, pindices, select):
+    def __init__(self, system, pindices, select, freq):
         """
         Create a legendre subsystem.
         @param system: an object (typically the system this subsystem belongs to)
@@ -47,6 +47,11 @@ class LegendreSubsystem(subsystems.SubSystem):
 
         # we need to be called with a valid universe
         self.universe_changed(system.universe)
+        
+        self.CG_step = 0
+        
+        # How often should the reference struct be updated
+        self.Freq_Update = freq 
 
         logging.info("created LegendreSubsystem, pindices: {}, select: {}".
                      format(pindices, select))
@@ -104,13 +109,15 @@ class LegendreSubsystem(subsystems.SubSystem):
         this is called just after the structure is equilibriated, this is the starting struct
         for the MD runs, this is to calculate basis.
         """
-        boxboundary = self.atoms.bbox()
-        self.box = (boxboundary[1,:] - boxboundary[0,:]) * 0.5
-        self.basis = self.Construct_Basis(self.atoms.positions - self.atoms.centerOfMass())  # Update this every CG step for now
+        if self.CG_step%self.Freq_Update == 0:
+            boxboundary = self.atoms.bbox()
+            self.box = (boxboundary[1,:] - boxboundary[0,:]) * 0.5
+            self.basis = self.Construct_Basis(self.atoms.positions - self.atoms.centerOfMass())  # Update this every CG step for now
 
         CG = self.ComputeCG(self.atoms.positions)
         self.CG = np.reshape(CG.T,(CG.shape[0]*CG.shape[1]))
         self.EqAtomPos = self.atoms.positions
+        self.CG_step += 1
 
     def ComputeCGInv(self,CG):
         """
@@ -219,10 +226,11 @@ def LegendreSubsystemFactory(system, selects, *args):
                  created for each residue.
     """
     kmax = 0
-    if len(args) == 1:
+    if len(args) == 2:
+        kmax, freq = int(args[0]), int(args[1])
+    elif len(args) == 3:
         kmax = int(args[0])
-    elif len(args) == 2:
-        kmax = int(args[0])
+        freq = int(args[1])
         toks = str(args[0]).split()
         if len(toks) == 2 and toks[0].lower() == "resid" and toks[1].lower() == "unique":
             groups = [system.universe.selectAtoms(s) for s in selects]
@@ -242,4 +250,4 @@ def LegendreSubsystemFactory(system, selects, *args):
     # number of columns had better be 3.
     ncg = pindices.shape[0] * pindices.shape[1]
 
-    return (ncg, [LegendreSubsystem(system, pindices, select) for select in selects])
+    return (ncg, [LegendreSubsystem(system, pindices, select, freq) for select in selects])
