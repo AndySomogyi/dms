@@ -51,7 +51,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         self.CG_step = 0
         
         # How often should the reference struct be updated
-        self.Freq_Update = freq 
+        self.Freq_Update = freq
 
         logging.info("created LegendreSubsystem, pindices: {}, select: {}".
                      format(pindices, select))
@@ -163,6 +163,8 @@ class LegendreSubsystem(subsystems.SubSystem):
         Constructs a matrix of orthonormalized legendre basis functions
         of size Natoms x NCG.
         """
+        logging.info('Performing QR decomposition ...')
+        
         ScaledPos = 2.0 * coords / self.box
         # grab the masses, and make it a column vector
         Masses = self.atoms.masses()[:,np.newaxis]
@@ -183,11 +185,12 @@ class LegendreSubsystem(subsystems.SubSystem):
 
 def QR_Decomp(V):
     """
-    QR_Decomp is an experimental function. Should be eventually deleted.
+    Performs QR decomposition on a matrix V to produce an orthonormalized
+    matrix Q..
     """
-    V,R = qr(V, mode='economic')
+    Q,R = qr(V, mode='economic')
 
-    return - V
+    return - Q
 
 def poly_indexes(kmax):
     """
