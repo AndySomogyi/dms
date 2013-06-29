@@ -229,11 +229,10 @@ def LegendreSubsystemFactory(system, selects, *args):
                  created for each residue.
     """
     kmax, freq = 0, 10
-    if len(args) == 2:
-        kmax, freq = int(args[0]), int(args[1])
-    elif len(args) == 3:
+    if len(args) == 1:
         kmax = int(args[0])
-        freq = int(args[1])
+    elif len(args) == 2:
+        kmax = int(args[0])
         toks = str(args[0]).split()
         if len(toks) == 2 and toks[0].lower() == "resid" and toks[1].lower() == "unique":
             groups = [system.universe.selectAtoms(s) for s in selects]
