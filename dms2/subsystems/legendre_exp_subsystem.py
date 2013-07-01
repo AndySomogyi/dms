@@ -229,7 +229,9 @@ def LegendreSubsystemFactory(system, selects, *args):
                  created for each residue.
     """
     kmax, freq = 0, 10
-    if len(args) == 2:
+    if len(args) == 1:
+        kmax = int(args[0])
+    elif len(args) == 2:
         kmax, freq = int(args[0]), int(args[1])
     elif len(args) == 3:
         kmax, freq = int(args[0]), int(args[1])
