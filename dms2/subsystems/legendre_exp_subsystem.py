@@ -19,7 +19,7 @@ from scipy.special import legendre
 from scipy.linalg import qr
 import logging
 
-class LegendreSubsystem(subsystems.SubSystem):
+class LegendreExpSubsystem(subsystems.SubSystem):
     """
     A set of CG variables.
     """
@@ -212,7 +212,7 @@ def poly_indexes(kmax):
 
     return np.array(indices,'i')
 
-def LegendreSubsystemFactory(system, selects, *args):
+def LegendreExpSubsystemFactory(system, selects, *args):
     """
     create a list of LegendreSubsystems.
 
