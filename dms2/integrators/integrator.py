@@ -9,7 +9,16 @@ import logging
 class Integrator(object):
     def __init__(self, system, *args):
         self.system = system
-        
+    self.args = args
+
+ 	for i in args:
+		print i
+		tmp = i.split()
+		if tmp[0] == 'hist_steps':
+			self.hist_steps = int(tmp[1])
+
+	self.RHS = [None] * self.hist_steps
+
     def run(self):
         """
         Run the simulation for as many timesteps as specified by the configuration.
