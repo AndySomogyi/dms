@@ -82,7 +82,7 @@ def make_parser():
                          "defaults to \'dms2.integrators.LangevinIntegrator\', "
                          "but the other integrator we provide is \'dms2.integrators.FactorizationIntegrator\'")
     
-    ap.add_argument("-integrator_args", default = [],
+    ap.add_argument("-integrator_args", default = ["hist_steps 1"], nargs="+", 
                     help="additional arguments passed to the integrator function")
     
     ap.add_argument("-cg_steps", default = 10,
