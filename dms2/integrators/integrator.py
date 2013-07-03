@@ -9,7 +9,7 @@ import logging
 class Integrator(object):
     def __init__(self, system, *args):
         self.system = system
-    self.args = args
+        self.args = args
 
  	for i in args:
 		print i
