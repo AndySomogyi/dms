@@ -49,7 +49,7 @@ class ExperimentalSubsystem(subsystems.SubSystem):
         self.universe_changed(system.universe)
         
         self.CG_step = 0
-    self.Hist_Steps = hist_steps
+        self.Hist_Steps = hist_steps
 	self.CG = [None] * self.Hist_Steps # This is for history
         
         # How often should the reference struct be updated
