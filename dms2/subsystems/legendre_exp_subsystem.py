@@ -19,11 +19,11 @@ from scipy.special import legendre
 from scipy.linalg import qr
 import logging
 
-class LegendreExpSubsystem(subsystems.SubSystem):
+class ExperimentalSubsystem(subsystems.SubSystem):
     """
     A set of CG variables.
     """
-    def __init__(self, system, pindices, select, freq):
+    def __init__(self, system, pindices, select, freq, hist_steps):
         """
         Create a legendre subsystem.
         @param system: an object (typically the system this subsystem belongs to)
@@ -49,6 +49,8 @@ class LegendreExpSubsystem(subsystems.SubSystem):
         self.universe_changed(system.universe)
         
         self.CG_step = 0
+    self.Hist_Steps = hist_steps
+	self.CG = [None] * self.Hist_Steps # This is for history
         
         # How often should the reference struct be updated
         self.Freq_Update = freq
@@ -72,6 +74,10 @@ class LegendreExpSubsystem(subsystems.SubSystem):
         self.atoms.bbox()
 
     def ComputeResiduals(self,CG):
+	"""
+	Computes the residuals 'sigma' to account for the loss of
+	atomic positional information from the previous time step
+	"""
         return self.EqAtomPos - (self.ComputeCGInv(CG) + self.atoms.centerOfMass())
 
     def frame(self):
@@ -97,8 +103,11 @@ class LegendreExpSubsystem(subsystems.SubSystem):
 
         @param CG: a length N_cg 1D array.
         """
-        self.residuals = self.ComputeResiduals(self.CG)
-        self.atoms.positions = self.ComputeCGInv(self.CG + dCG) + self.atoms.centerOfMass() + self.residuals
+	recent_CG = [CG for CG in self.CG if CG is not None][-1]
+	last_CG = [CG for CG in self.CG if CG is not None][0]
+
+        self.residuals = self.ComputeResiduals(recent_CG)
+        self.atoms.positions = self.ComputeCGInv(last_CG + dCG) + self.atoms.centerOfMass() + self.residuals
         # or self.atoms.positions += self.ComputeCGInv(dCG)
 
     def minimized(self):
@@ -115,7 +124,9 @@ class LegendreExpSubsystem(subsystems.SubSystem):
             self.basis = self.Construct_Basis(self.atoms.positions - self.atoms.centerOfMass())  # Update this every CG step for now
 
         CG = self.ComputeCG(self.atoms.positions)
-        self.CG = np.reshape(CG.T,(CG.shape[0]*CG.shape[1]))
+        (self.CG).append(np.reshape(CG.T,(CG.shape[0]*CG.shape[1])))
+	(self.CG).pop(0)
+
         self.EqAtomPos = self.atoms.positions
         self.CG_step += 1
 
@@ -212,7 +223,7 @@ def poly_indexes(kmax):
 
     return np.array(indices,'i')
 
-def LegendreExpSubsystemFactory(system, selects, *args):
+def ExperimentalSubsystemFactory(system, selects, *args):
     """
     create a list of LegendreSubsystems.
 
@@ -228,20 +239,30 @@ def LegendreExpSubsystemFactory(system, selects, *args):
                  if args is [kmax, "resid unique"], an seperate subsystem is
                  created for each residue.
     """
-    kmax, freq = 0, 10
-    if len(args) == 1:
-        kmax = int(args[0])
-    elif len(args) == 2:
-        kmax, freq = int(args[0]), int(args[1])
-    elif len(args) == 3:
-        kmax, freq = int(args[0]), int(args[1])
-        toks = str(args[2]).split()
-        if len(toks) == 2 and toks[0].lower() == "resid" and toks[1].lower() == "unique":
-            groups = [system.universe.selectAtoms(s) for s in selects]
-            resids = [resid for g in groups for resid in g.resids()]
-            selects = ["resid " + str(resid) for resid in resids]
-    else:
-        raise ValueError("invalid args")
+    kmax, freq = 0, 10 #default args
+    print args
+    try:
+	for i in args:
+		tmp = i.split()
+		if tmp[0] == 'kmax':
+			kmax = int(tmp[1])
+		elif tmp[0] == 'reref_freq':
+		     	freq = int(tmp[1])
+		elif tmp[0] == 'hist_steps':
+			hist_steps = int(tmp[1])
+	    	elif tmp[0] == 'resid':
+		     	toks = str(args[3]).split()
+			if len(toks) == 2 and toks[0].lower() == "resid" and toks[1].lower() == "unique":
+	        		groups = [system.universe.selectAtoms(s) for s in selects]
+	        		resids = [resid for g in groups for resid in g.resids()]
+	        		selects = ["resid " + str(resid) for resid in resids]
+    except:
+	raise ValueError("invalid subsystem args")
+
+    try:
+	logging.info('using up to {} previous time steps to integrate the CG dynamic equations'.format(hist_steps))
+    except:
+	raise ValueError("invalid integrator_args")
 
     # test to see if the generated selects work
     [system.universe.selectAtoms(select) for select in selects]
@@ -254,4 +275,4 @@ def LegendreExpSubsystemFactory(system, selects, *args):
     # number of columns had better be 3.
     ncg = pindices.shape[0] * pindices.shape[1]
 
-    return (ncg, [LegendreSubsystem(system, pindices, select, freq) for select in selects])
+    return (ncg, [ExperimentalSubsystem(system, pindices, select, freq, hist_steps) for select in selects])
