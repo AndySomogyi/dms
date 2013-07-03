@@ -206,7 +206,6 @@ class System(object):
         # this list will remain constant as long as the topology remains constant.
         logging.info("creating subsystems")
         factory = util.get_class(self.config[SUBSYSTEM_FACTORY])
-    print type(self.config[INTEGRATOR_ARGS]), type(self.config[SUBSYSTEM_ARGS])
         self.ncgs, self.subsystems = factory(self, self.config[SUBSYSTEM_SELECTS], *(self.config[INTEGRATOR_ARGS].tolist()+self.config[SUBSYSTEM_ARGS].tolist()))
         logging.debug("using {} cg variables for each {} subsystems".format(self.ncgs, len(self.subsystems)))
 
