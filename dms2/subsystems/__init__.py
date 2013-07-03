@@ -1,4 +1,4 @@
 from subsystems import *
 from rigid_subsystem import RigidSubsystemFactory
+from experimental_subsystem import ExperimentalSubsystemFactory
 from legendre_subsystem import LegendreSubsystemFactory
-from legendre_exp_subsystem import ExperimentalSubsystemFactory
