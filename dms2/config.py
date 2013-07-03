@@ -422,13 +422,14 @@ def create_sim(fid,
             # we have a fake sys now, can call subsys factory
             factory = util.get_class(subsystem_factory)
             print("created subsystem factory {}, attepting to create subsystems...".format(subsystem_factory))
-            test_ncgs, test_ss = factory(dummysys, subsystem_selects, *subsystem_args)
+            test_ncgs, test_ss = factory(dummysys, subsystem_selects, *(subsystem_args + integrator_args))
             
             print("subsystem factory appears to work, produces {} cg variables for each {} subsystems.".format(test_ncgs, len(test_ss)))
             
             conf[SUBSYSTEM_FACTORY] = subsystem_factory
             conf[SUBSYSTEM_SELECTS] = subsystem_selects
             conf[SUBSYSTEM_ARGS] = subsystem_args
+
             print("{}: {}".format(SUBSYSTEM_FACTORY, subsystem_factory))
 
         except Exception, e:
@@ -460,9 +461,3 @@ def set_tempdir(f):
     os.environ["TMP"] = d
     tempfile.tempdir = d
     logging.info("tempdir for MD runs will be {}".format(tempfile.gettempdir()))
-        
-
-
-
-    
-    
