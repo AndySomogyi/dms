@@ -72,7 +72,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         self.atoms.bbox()
 
     def ComputeResiduals(self,CG):
-        return self.EqAtomPos - (self.ComputeCGInv(CG) + self.atoms.centerOfMass())
+        return self.EqAtomPos - (self.ComputeCGInv(CG)) # + self.atoms.centerOfMass())
 
     def frame(self):
         """
@@ -98,7 +98,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         @param CG: a length N_cg 1D array.
         """
         self.residuals = self.ComputeResiduals(self.CG)
-        self.atoms.positions = self.ComputeCGInv(self.CG + dCG) + self.atoms.centerOfMass() + self.residuals
+        self.atoms.positions = self.ComputeCGInv(self.CG + dCG) + self.residuals #+ self.atoms.centerOfMass()
         # or self.atoms.positions += self.ComputeCGInv(dCG)
 
     def minimized(self):
@@ -140,7 +140,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         var could be atomic positions or velocities
         """
         Utw = self.basis.T * self.atoms.masses()
-        return 2.0 / self.box * np.dot(Utw,var - self.atoms.centerOfMass())
+        return 2.0 / self.box * np.dot(Utw,var) # - self.atoms.centerOfMass())
         
     def ComputeCG_Vel(self,vel):
         """
@@ -149,6 +149,7 @@ class LegendreSubsystem(subsystems.SubSystem):
         var could be atomic positions or velocities
         """
         Utw = self.basis.T * self.atoms.masses()
+        #vel_c = np.dot(vel, self.atoms.masses()) / np.sum(self.atoms.masses())
         return 2.0 / self.box * np.dot(Utw,vel)
 
     def ComputeCG_Forces(self, atomic_forces):
