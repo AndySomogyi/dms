@@ -15,6 +15,7 @@ import os
 import os.path
 import argparse
 import logging
+import analysis
 
 def make_parser():
     """
@@ -155,9 +156,6 @@ def make_parser():
                          "in the structure pdb.")
     ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
     ap.set_defaults(__func__=config.create_sol)
-
-    
-
     
     # Done with config, the MOST complicated command, now make parsers for the more
     # simple commands
@@ -165,6 +163,24 @@ def make_parser():
                                " This will automatically continue a simulation",)
     ap.add_argument("sys", help="name of simulation file")
     ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
+    
+    
+    def analyze(struct, traj, var = 'velocities()', kmax = 1, delta_frames, ofname = 'tmp', plot = False):
+        analysis.Plot_Time_Integral(struct, traj, kmax, var, delta_frames, ofname)
+        
+    ap = subparsers.add_parser("analyze", help="time correlation and integral convergence analysis")
+    ap.add_argument("-traj", dest="traj", required=True, type=str, default=None, help="trajectory filename")
+    ap.add_argument("-struct", dest="struct", required=True, type=str,
+                    help="the starting structure name")
+    ap.add_argument("-var", dest="var", required=False, default='velocities()', help="which variables to use")
+    ap.add_argument("-kmax", dest="kmax", required=False, default=1, help="maximum polynomial order", type=int)
+    ap.add_argument("-delta_frames", dest="delta_frames", required=True, help="minimum number of frames to use to calculate"
+                    " \delta (length of an mdrun)", type=int)
+    ap.add_argument("-ofname", dest="ofname", required=False, default='tmp', help="output filename", type=str)
+    ap.add_argument("-plot", action="store_true", required=False, help="plots the integral as a function of \delta")
+    
+    ap.set_defaults(__func__=analyze)
+    
     def run(sys, debug) :
         config.set_tempdir(sys)
         if debug:
