@@ -159,27 +159,27 @@ def make_parser():
     
     # Done with config, the MOST complicated command, now make parsers for the more
     # simple commands
-    ap = subparsers.add_parser("run", help="start or continue a full simulation. "
-                               " This will automatically continue a simulation",)
-    ap.add_argument("sys", help="name of simulation file")
-    ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
-    
-    
-    def analyze(struct, traj, var = 'velocities()', kmax = 1, delta_frames, ofname = 'tmp', plot = False):
+    def analyze(struct, traj, var, kmax, delta_frames, ofname, plot):
         analysis.Plot_Time_Integral(struct, traj, kmax, var, delta_frames, ofname)
         
     ap = subparsers.add_parser("analyze", help="time correlation and integral convergence analysis")
     ap.add_argument("-traj", dest="traj", required=True, type=str, default=None, help="trajectory filename")
     ap.add_argument("-struct", dest="struct", required=True, type=str,
                     help="the starting structure name")
-    ap.add_argument("-var", dest="var", required=False, default='velocities()', help="which variables to use")
+    ap.add_argument("-var", dest="var", required=False, default='velocities()', help="which variables to use: velocities() "
+                    "(non-inertial) or forces (inertial), or even positions (for dcd trajectories)")
     ap.add_argument("-kmax", dest="kmax", required=False, default=1, help="maximum polynomial order", type=int)
-    ap.add_argument("-delta_frames", dest="delta_frames", required=True, help="minimum number of frames to use to calculate"
+    ap.add_argument("-delta_frames", dest="delta_frames", required=True, help="minimum number of frames used to calculate"
                     " \delta (length of an mdrun)", type=int)
     ap.add_argument("-ofname", dest="ofname", required=False, default='tmp', help="output filename", type=str)
     ap.add_argument("-plot", action="store_true", required=False, help="plots the integral as a function of \delta")
     
     ap.set_defaults(__func__=analyze)
+    
+    ap = subparsers.add_parser("run", help="start or continue a full simulation. "
+                               " This will automatically continue a simulation",)
+    ap.add_argument("sys", help="name of simulation file")
+    ap.add_argument("-debug", action="store_true", help="enable debug mode (save all simulation directories).")
     
     def run(sys, debug) :
         config.set_tempdir(sys)
