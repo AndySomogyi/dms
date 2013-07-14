@@ -160,7 +160,7 @@ def make_parser():
     # Done with config, the MOST complicated command, now make parsers for the more
     # simple commands
     def analyze(struct, traj, var, kmax, delta_frames, ofname, plot):
-        analysis.Plot_Time_Integral(struct, traj, kmax, var, delta_frames, ofname)
+        analysis.Plot_Time_Integral(struct, traj, kmax, var, delta_frames, ofname, plot)
         
     ap = subparsers.add_parser("analyze", help="time correlation and integral convergence analysis")
     ap.add_argument("-traj", dest="traj", required=True, type=str, default=None, help="trajectory filename")
@@ -172,7 +172,7 @@ def make_parser():
     ap.add_argument("-delta_frames", dest="delta_frames", required=True, help="minimum number of frames used to calculate"
                     " \delta (length of an mdrun)", type=int)
     ap.add_argument("-ofname", dest="ofname", required=False, default='tmp', help="output filename", type=str)
-    ap.add_argument("-plot", action="store_true", required=False, help="plots the integral as a function of \delta")
+    ap.add_argument("--plot", action="store_true", required=False, help="plots the integral as a function of \delta")
     
     ap.set_defaults(__func__=analyze)
     
